@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stained Glass Transformer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+        
+        #app {
+            display: flex;
+            height: 100vh;
+        }
+        
+        #sidebar {
+            width: 320px;
+            background: #242424;
+            border-right: 1px solid #333;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        
+        #canvas-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0a0a0a;
+            position: relative;
+        }
+        
+        #renderCanvas {
+            max-width: 100%;
+            max-height: 100%;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .upload-area {
+            border: 2px dashed #555;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        
+        .upload-area:hover {
+            border-color: #888;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .upload-area.dragging {
+            border-color: #4a9eff;
+            background: rgba(74, 158, 255, 0.1);
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .btn {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #3a8eef;
+        }
+        
+        .btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        
+        h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+        
+        .status {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #888;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .section:last-child {
+            border-bottom: none;
+        }
+        
+        .slider-group {
+            margin-bottom: 15px;
+        }
+        
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 13px;
+            color: #ccc;
+        }
+        
+        .slider-value {
+            color: #4a9eff;
+            font-weight: 600;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #333;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4a9eff;
+            cursor: pointer;
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4a9eff;
+            cursor: pointer;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="sidebar">
+            <div class="section">
+                <h2>Image Upload</h2>
+                <div class="upload-area" id="uploadArea">
+                    <div style="font-size: 48px; margin-bottom: 10px;">📷</div>
+                    <div style="margin-bottom: 10px;">Drag & drop an image here</div>
+                    <button class="btn" onclick="document.getElementById('fileInput').click()">
+                        Choose File
+                    </button>
+                    <input type="file" id="fileInput" accept="image/*">
+                </div>
+                <div class="status" id="uploadStatus">No image loaded</div>
+            </div>
+            
+            <div class="section">
+                <h2>Info</h2>
+                <div id="imageInfo" style="font-size: 13px; color: #aaa;">
+                    Awaiting image upload...
+                </div>
+            </div>
+            
+            <div class="section" id="glassSection" style="display: none;">
+                <h2>Glass Pieces</h2>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Piece Count</span>
+                        <span class="slider-value" id="cellCountValue">150</span>
+                    </div>
+                    <input type="range" id="cellCount" min="50" max="500" value="150" step="10">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Cell Uniformity</span>
+                        <span class="slider-value" id="uniformityValue">0.5</span>
+                    </div>
+                    <input type="range" id="uniformity" min="0" max="1" value="0.5" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Min Cell Size</span>
+                        <span class="slider-value" id="minCellSizeValue">20</span>
+                    </div>
+                    <input type="range" id="minCellSize" min="10" max="100" value="20" step="5">
+                </div>
+                
+                <button class="btn" id="regenerateBtn" style="width: 100%; margin-top: 10px;">
+                    Regenerate Glass
+                </button>
+                
+                <div class="status" id="processStatus" style="margin-top: 10px;"></div>
+            </div>
+        </div>
+        
+        <div id="canvas-container">
+            <canvas id="renderCanvas"></canvas>
+        </div>
+    </div>
+
+    <script type="module">
+        // ============================================================================
+        // Module: StainedGlassRenderer
+        // Renders the stained glass effect to canvas
+        // ============================================================================
+        class StainedGlassRenderer {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+            }
+            
+            // Render basic flat stained glass (Phase 2 - simple version)
+            renderBasic(width, height, cells, cellMap) {
+                this.canvas.width = width;
+                this.canvas.height = height;
+                
+                const imageData = this.ctx.createImageData(width, height);
+                const data = imageData.data;
+                
+                // Fill each pixel with its cell color
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const mapIdx = y * width + x;
+                        const cellIdx = cellMap[mapIdx];
+                        const cell = cells[cellIdx];
+                        const pixelIdx = mapIdx * 4;
+                        
+                        data[pixelIdx] = cell.color.r;
+                        data[pixelIdx + 1] = cell.color.g;
+                        data[pixelIdx + 2] = cell.color.b;
+                        data[pixelIdx + 3] = 255;
+                    }
+                }
+                
+                this.ctx.putImageData(imageData, 0, 0);
+                
+                // Draw cell borders (lead lines) - simple version
+                this.drawBorders(cells, cellMap, width, height);
+            }
+            
+            drawBorders(cells, cellMap, width, height) {
+                this.ctx.strokeStyle = '#1a1a1a';
+                this.ctx.lineWidth = 2;
+                
+                // Find border pixels using edge detection
+                for (let y = 1; y < height - 1; y++) {
+                    for (let x = 1; x < width - 1; x++) {
+                        const idx = y * width + x;
+                        const cellIdx = cellMap[idx];
+                        
+                        // Check neighbors
+                        const rightIdx = cellMap[y * width + (x + 1)];
+                        const bottomIdx = cellMap[(y + 1) * width + x];
+                        
+                        if (cellIdx !== rightIdx || cellIdx !== bottomIdx) {
+                            this.ctx.fillStyle = '#1a1a1a';
+                            this.ctx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                }
+            }
+        }
+        // Module: Utilities
+        // Helper functions for math and random number generation
+        // ============================================================================
+        class Random {
+            constructor(seed = Date.now()) {
+                this.seed = seed;
+            }
+            
+            // Linear congruential generator
+            next() {
+                this.seed = (this.seed * 1664525 + 1013904223) % 4294967296;
+                return this.seed / 4294967296;
+            }
+            
+            range(min, max) {
+                return min + this.next() * (max - min);
+            }
+            
+            int(min, max) {
+                return Math.floor(this.range(min, max + 1));
+            }
+        }
+        
+        class Vec2 {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+            
+            distanceTo(other) {
+                const dx = this.x - other.x;
+                const dy = this.y - other.y;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+            
+            add(other) {
+                return new Vec2(this.x + other.x, this.y + other.y);
+            }
+            
+            scale(s) {
+                return new Vec2(this.x * s, this.y * s);
+            }
+        }
+
+        // ============================================================================
+        // Module: VoronoiGenerator
+        // Generates Voronoi diagrams for glass cell segmentation
+        // ============================================================================
+        class VoronoiGenerator {
+            constructor(width, height) {
+                this.width = width;
+                this.height = height;
+                this.sites = [];
+            }
+            
+            // Generate site points using various distribution strategies
+            generateSites(count, uniformity, minDistance, seed) {
+                const random = new Random(seed);
+                this.sites = [];
+                
+                // Mix of uniform grid and random placement based on uniformity
+                // uniformity 0 = pure random, 1 = pure grid
+                
+                if (uniformity > 0.8) {
+                    // Mostly grid-based with slight jitter
+                    this.generateGridSites(count, uniformity, random);
+                } else if (uniformity < 0.2) {
+                    // Mostly random with Lloyd relaxation
+                    this.generateRandomSites(count, minDistance, random);
+                } else {
+                    // Hybrid approach
+                    this.generateHybridSites(count, uniformity, minDistance, random);
+                }
+                
+                return this.sites;
+            }
+            
+            generateGridSites(count, uniformity, random) {
+                const cols = Math.ceil(Math.sqrt(count * this.width / this.height));
+                const rows = Math.ceil(count / cols);
+                const cellW = this.width / cols;
+                const cellH = this.height / rows;
+                
+                const jitter = (1 - uniformity) * 0.4; // Max 40% jitter
+                
+                for (let row = 0; row < rows; row++) {
+                    for (let col = 0; col < cols; col++) {
+                        if (this.sites.length >= count) break;
+                        
+                        const baseX = (col + 0.5) * cellW;
+                        const baseY = (row + 0.5) * cellH;
+                        
+                        const offsetX = (random.next() - 0.5) * cellW * jitter;
+                        const offsetY = (random.next() - 0.5) * cellH * jitter;
+                        
+                        this.sites.push(new Vec2(
+                            Math.max(0, Math.min(this.width, baseX + offsetX)),
+                            Math.max(0, Math.min(this.height, baseY + offsetY))
+                        ));
+                    }
+                }
+            }
+            
+            generateRandomSites(count, minDistance, random) {
+                const maxAttempts = count * 50;
+                let attempts = 0;
+                
+                while (this.sites.length < count && attempts < maxAttempts) {
+                    const candidate = new Vec2(
+                        random.range(0, this.width),
+                        random.range(0, this.height)
+                    );
+                    
+                    // Check minimum distance
+                    let valid = true;
+                    for (const site of this.sites) {
+                        if (site.distanceTo(candidate) < minDistance) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    
+                    if (valid) {
+                        this.sites.push(candidate);
+                    }
+                    attempts++;
+                }
+                
+                // Fill remaining with any valid position if we hit max attempts
+                while (this.sites.length < count) {
+                    this.sites.push(new Vec2(
+                        random.range(0, this.width),
+                        random.range(0, this.height)
+                    ));
+                }
+                
+                // Apply Lloyd relaxation for better distribution
+                this.lloydRelaxation(2);
+            }
+            
+            generateHybridSites(count, uniformity, minDistance, random) {
+                // Start with grid
+                const gridCount = Math.floor(count * uniformity);
+                const randomCount = count - gridCount;
+                
+                this.generateGridSites(gridCount, 0.9, random);
+                
+                // Add random sites
+                const maxAttempts = randomCount * 30;
+                let attempts = 0;
+                
+                while (this.sites.length < count && attempts < maxAttempts) {
+                    const candidate = new Vec2(
+                        random.range(0, this.width),
+                        random.range(0, this.height)
+                    );
+                    
+                    let valid = true;
+                    const checkDist = minDistance * (1 - uniformity * 0.5);
+                    
+                    for (const site of this.sites) {
+                        if (site.distanceTo(candidate) < checkDist) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    
+                    if (valid) {
+                        this.sites.push(candidate);
+                    }
+                    attempts++;
+                }
+                
+                while (this.sites.length < count) {
+                    this.sites.push(new Vec2(
+                        random.range(0, this.width),
+                        random.range(0, this.height)
+                    ));
+                }
+            }
+            
+            // Lloyd relaxation: move sites to centroids of their Voronoi cells
+            lloydRelaxation(iterations) {
+                for (let iter = 0; iter < iterations; iter++) {
+                    const cells = this.computeVoronoiCells();
+                    
+                    for (let i = 0; i < this.sites.length; i++) {
+                        if (cells[i] && cells[i].length > 0) {
+                            const centroid = this.computeCentroid(cells[i]);
+                            this.sites[i] = centroid;
+                        }
+                    }
+                }
+            }
+            
+            // Compute Voronoi cells using pixel-based approach
+            computeVoronoiCells() {
+                const cells = Array(this.sites.length).fill(null).map(() => []);
+                
+                // Sample points on a grid
+                const step = 5; // Sample every 5 pixels for efficiency
+                
+                for (let y = 0; y < this.height; y += step) {
+                    for (let x = 0; x < this.width; x += step) {
+                        const point = new Vec2(x, y);
+                        let nearest = 0;
+                        let minDist = Infinity;
+                        
+                        for (let i = 0; i < this.sites.length; i++) {
+                            const dist = point.distanceTo(this.sites[i]);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                nearest = i;
+                            }
+                        }
+                        
+                        cells[nearest].push(point);
+                    }
+                }
+                
+                return cells;
+            }
+            
+            computeCentroid(points) {
+                let sumX = 0;
+                let sumY = 0;
+                
+                for (const p of points) {
+                    sumX += p.x;
+                    sumY += p.y;
+                }
+                
+                return new Vec2(
+                    Math.max(0, Math.min(this.width, sumX / points.length)),
+                    Math.max(0, Math.min(this.height, sumY / points.length))
+                );
+            }
+            
+            getSites() {
+                return this.sites;
+            }
+        }
+
+        // ============================================================================
+        // Module: CellSegmenter
+        // Creates cell regions and extracts colors from source image
+        // ============================================================================
+        class CellSegmenter {
+            constructor(width, height, imageData) {
+                this.width = width;
+                this.height = height;
+                this.imageData = imageData;
+                this.cellMap = null; // Pixel to cell index mapping
+                this.cells = null; // Cell data including colors
+            }
+            
+            // Compute which cell each pixel belongs to
+            computeCellMap(sites) {
+                this.cellMap = new Uint16Array(this.width * this.height);
+                
+                // For each pixel, find nearest site
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        let nearest = 0;
+                        let minDist = Infinity;
+                        
+                        for (let i = 0; i < sites.length; i++) {
+                            const dx = x - sites[i].x;
+                            const dy = y - sites[i].y;
+                            const dist = dx * dx + dy * dy; // Squared distance is fine for comparison
+                            
+                            if (dist < minDist) {
+                                minDist = dist;
+                                nearest = i;
+                            }
+                        }
+                        
+                        this.cellMap[y * this.width + x] = nearest;
+                    }
+                }
+                
+                return this.cellMap;
+            }
+            
+            // Extract average color and bounds for each cell
+            extractCellData(sites) {
+                this.cells = sites.map((site, index) => ({
+                    site,
+                    index,
+                    pixels: [],
+                    color: { r: 0, g: 0, b: 0 },
+                    bounds: { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+                }));
+                
+                const data = this.imageData.data;
+                
+                // Accumulate pixel colors for each cell
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        const mapIdx = y * this.width + x;
+                        const cellIdx = this.cellMap[mapIdx];
+                        const pixelIdx = mapIdx * 4;
+                        
+                        const cell = this.cells[cellIdx];
+                        
+                        cell.color.r += data[pixelIdx];
+                        cell.color.g += data[pixelIdx + 1];
+                        cell.color.b += data[pixelIdx + 2];
+                        cell.pixels.push({ x, y });
+                        
+                        // Update bounds
+                        cell.bounds.minX = Math.min(cell.bounds.minX, x);
+                        cell.bounds.minY = Math.min(cell.bounds.minY, y);
+                        cell.bounds.maxX = Math.max(cell.bounds.maxX, x);
+                        cell.bounds.maxY = Math.max(cell.bounds.maxY, y);
+                    }
+                }
+                
+                // Compute average colors
+                for (const cell of this.cells) {
+                    const count = cell.pixels.length;
+                    if (count > 0) {
+                        cell.color.r = Math.round(cell.color.r / count);
+                        cell.color.g = Math.round(cell.color.g / count);
+                        cell.color.b = Math.round(cell.color.b / count);
+                    }
+                }
+                
+                return this.cells;
+            }
+            
+            getCellMap() {
+                return this.cellMap;
+            }
+            
+            getCells() {
+                return this.cells;
+            }
+        }
+
+        // ============================================================================
+        // Module: ImageLoader
+        // Handles image upload, validation, and preprocessing
+        // ============================================================================
+        class ImageLoader {
+            constructor() {
+                this.currentImage = null;
+                this.maxDimension = 1024; // Limit for performance
+            }
+            
+            async loadFromFile(file) {
+                if (!file.type.startsWith('image/')) {
+                    throw new Error('Invalid file type. Please upload an image.');
+                }
+                
+                const img = await this.createImageFromFile(file);
+                this.currentImage = await this.preprocessImage(img);
+                return this.currentImage;
+            }
+            
+            createImageFromFile(file) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    const url = URL.createObjectURL(file);
+                    
+                    img.onload = () => {
+                        URL.revokeObjectURL(url);
+                        resolve(img);
+                    };
+                    
+                    img.onerror = () => {
+                        URL.revokeObjectURL(url);
+                        reject(new Error('Failed to load image'));
+                    };
+                    
+                    img.src = url;
+                });
+            }
+            
+            async preprocessImage(img) {
+                // Resize if needed while maintaining aspect ratio
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > this.maxDimension || height > this.maxDimension) {
+                    const scale = this.maxDimension / Math.max(width, height);
+                    width = Math.floor(width * scale);
+                    height = Math.floor(height * scale);
+                }
+                
+                // Create canvas and draw resized image
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Get image data for processing
+                const imageData = ctx.getImageData(0, 0, width, height);
+                
+                return {
+                    canvas,
+                    imageData,
+                    width,
+                    height,
+                    originalWidth: img.width,
+                    originalHeight: img.height
+                };
+            }
+            
+            getCurrentImage() {
+                return this.currentImage;
+            }
+        }
+
+        // ============================================================================
+        // Module: CanvasRenderer
+        // Handles WebGL/Canvas rendering operations
+        // ============================================================================
+        class CanvasRenderer {
+            constructor(canvasElement) {
+                this.canvas = canvasElement;
+                this.ctx = canvasElement.getContext('2d', { alpha: false });
+                this.currentImageData = null;
+            }
+            
+            resize(width, height) {
+                this.canvas.width = width;
+                this.canvas.height = height;
+            }
+            
+            clear() {
+                this.ctx.fillStyle = '#0a0a0a';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+            
+            drawImageData(imageData) {
+                this.currentImageData = imageData;
+                this.resize(imageData.width, imageData.height);
+                this.ctx.putImageData(imageData, 0, 0);
+            }
+            
+            drawProcessedImage(processedImage) {
+                this.resize(processedImage.width, processedImage.height);
+                this.ctx.drawImage(processedImage.canvas, 0, 0);
+            }
+            
+            getCanvas() {
+                return this.canvas;
+            }
+        }
+
+        // ============================================================================
+        // Module: UIController
+        // Manages UI interactions and state
+        // ============================================================================
+        class UIController {
+            constructor() {
+                this.uploadArea = document.getElementById('uploadArea');
+                this.fileInput = document.getElementById('fileInput');
+                this.uploadStatus = document.getElementById('uploadStatus');
+                this.imageInfo = document.getElementById('imageInfo');
+                this.glassSection = document.getElementById('glassSection');
+                this.processStatus = document.getElementById('processStatus');
+                
+                // Slider elements
+                this.sliders = {
+                    cellCount: document.getElementById('cellCount'),
+                    uniformity: document.getElementById('uniformity'),
+                    minCellSize: document.getElementById('minCellSize')
+                };
+                
+                this.sliderValues = {
+                    cellCount: document.getElementById('cellCountValue'),
+                    uniformity: document.getElementById('uniformityValue'),
+                    minCellSize: document.getElementById('minCellSizeValue')
+                };
+                
+                this.regenerateBtn = document.getElementById('regenerateBtn');
+                
+                this.onImageUpload = null;
+                this.onRegenerate = null;
+                
+                this.initializeEventListeners();
+            }
+            
+            initializeEventListeners() {
+                // File input change
+                this.fileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        this.handleFile(e.target.files[0]);
+                    }
+                });
+                
+                // Drag and drop
+                this.uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    this.uploadArea.classList.add('dragging');
+                });
+                
+                this.uploadArea.addEventListener('dragleave', () => {
+                    this.uploadArea.classList.remove('dragging');
+                });
+                
+                this.uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    this.uploadArea.classList.remove('dragging');
+                    
+                    if (e.dataTransfer.files.length > 0) {
+                        this.handleFile(e.dataTransfer.files[0]);
+                    }
+                });
+                
+                // Slider updates
+                Object.entries(this.sliders).forEach(([key, slider]) => {
+                    slider.addEventListener('input', (e) => {
+                        this.updateSliderValue(key, e.target.value);
+                    });
+                });
+                
+                // Regenerate button
+                this.regenerateBtn.addEventListener('click', () => {
+                    if (this.onRegenerate) {
+                        this.onRegenerate();
+                    }
+                });
+            }
+            
+            updateSliderValue(key, value) {
+                const display = key === 'uniformity' ? parseFloat(value).toFixed(2) : value;
+                this.sliderValues[key].textContent = display;
+            }
+            
+            async handleFile(file) {
+                this.updateStatus('Loading image...', 'loading');
+                
+                try {
+                    if (this.onImageUpload) {
+                        await this.onImageUpload(file);
+                    }
+                } catch (error) {
+                    this.updateStatus(`Error: ${error.message}`, 'error');
+                    console.error(error);
+                }
+            }
+            
+            updateStatus(message, type = 'info') {
+                this.uploadStatus.textContent = message;
+                this.uploadStatus.style.color = type === 'error' ? '#ff6b6b' : 
+                                                 type === 'loading' ? '#4a9eff' : '#888';
+            }
+            
+            updateProcessStatus(message, type = 'info') {
+                this.processStatus.textContent = message;
+                this.processStatus.style.color = type === 'error' ? '#ff6b6b' : 
+                                                  type === 'loading' ? '#4a9eff' : '#88cc88';
+            }
+            
+            updateImageInfo(imageData) {
+                this.imageInfo.innerHTML = `
+                    <div>Dimensions: ${imageData.width} × ${imageData.height}px</div>
+                    <div>Original: ${imageData.originalWidth} × ${imageData.originalHeight}px</div>
+                    <div>Ready for processing</div>
+                `;
+            }
+            
+            showGlassControls() {
+                this.glassSection.style.display = 'block';
+            }
+            
+            getSliderValues() {
+                return {
+                    cellCount: parseInt(this.sliders.cellCount.value),
+                    uniformity: parseFloat(this.sliders.uniformity.value),
+                    minCellSize: parseInt(this.sliders.minCellSize.value)
+                };
+            }
+            
+            setImageUploadCallback(callback) {
+                this.onImageUpload = callback;
+            }
+            
+            setRegenerateCallback(callback) {
+                this.onRegenerate = callback;
+            }
+            
+            setProcessing(isProcessing) {
+                this.regenerateBtn.disabled = isProcessing;
+                Object.values(this.sliders).forEach(slider => {
+                    slider.disabled = isProcessing;
+                });
+            }
+        }
+
+        // ============================================================================
+        // Module: Application
+        // Main application controller
+        // ============================================================================
+        class StainedGlassApp {
+            constructor() {
+                this.imageLoader = new ImageLoader();
+                this.renderer = new CanvasRenderer(document.getElementById('renderCanvas'));
+                this.ui = new UIController();
+                
+                // Processing modules (created after image load)
+                this.voronoiGen = null;
+                this.segmenter = null;
+                this.glassRenderer = null;
+                
+                // Current state
+                this.currentImage = null;
+                this.currentCells = null;
+                this.currentCellMap = null;
+                this.randomSeed = Date.now();
+                
+                this.initialize();
+            }
+            
+            initialize() {
+                // Set up UI callbacks
+                this.ui.setImageUploadCallback(async (file) => {
+                    await this.handleImageUpload(file);
+                });
+                
+                this.ui.setRegenerateCallback(() => {
+                    this.generateStainedGlass();
+                });
+                
+                console.log('Stained Glass App initialized - Phase 2: Voronoi Segmentation');
+            }
+            
+            async handleImageUpload(file) {
+                try {
+                    // Load and preprocess image
+                    this.currentImage = await this.imageLoader.loadFromFile(file);
+                    
+                    // Display original on canvas temporarily
+                    this.renderer.drawProcessedImage(this.currentImage);
+                    
+                    // Update UI
+                    this.ui.updateStatus('Image loaded successfully', 'info');
+                    this.ui.updateImageInfo(this.currentImage);
+                    this.ui.showGlassControls();
+                    
+                    // Initialize processing modules
+                    this.voronoiGen = new VoronoiGenerator(
+                        this.currentImage.width,
+                        this.currentImage.height
+                    );
+                    
+                    this.segmenter = new CellSegmenter(
+                        this.currentImage.width,
+                        this.currentImage.height,
+                        this.currentImage.imageData
+                    );
+                    
+                    this.glassRenderer = new StainedGlassRenderer(
+                        document.getElementById('renderCanvas')
+                    );
+                    
+                    // Generate initial stained glass
+                    this.generateStainedGlass();
+                    
+                } catch (error) {
+                    throw error;
+                }
+            }
+            
+            generateStainedGlass() {
+                if (!this.currentImage) return;
+                
+                this.ui.setProcessing(true);
+                this.ui.updateProcessStatus('Generating glass pieces...', 'loading');
+                
+                // Use setTimeout to allow UI to update
+                setTimeout(() => {
+                    try {
+                        const params = this.ui.getSliderValues();
+                        
+                        console.log('Generating stained glass:', params);
+                        const startTime = performance.now();
+                        
+                        // Step 1: Generate Voronoi sites
+                        const sites = this.voronoiGen.generateSites(
+                            params.cellCount,
+                            params.uniformity,
+                            params.minCellSize,
+                            this.randomSeed
+                        );
+                        
+                        console.log(`Generated ${sites.length} sites`);
+                        
+                        // Step 2: Compute cell map (which cell each pixel belongs to)
+                        this.currentCellMap = this.segmenter.computeCellMap(sites);
+                        
+                        console.log('Cell map computed');
+                        
+                        // Step 3: Extract cell data (colors, bounds)
+                        this.currentCells = this.segmenter.extractCellData(sites);
+                        
+                        console.log('Cell data extracted');
+                        
+                        // Step 4: Render stained glass
+                        this.glassRenderer.renderBasic(
+                            this.currentImage.width,
+                            this.currentImage.height,
+                            this.currentCells,
+                            this.currentCellMap
+                        );
+                        
+                        const elapsed = performance.now() - startTime;
+                        console.log(`Rendering complete in ${elapsed.toFixed(0)}ms`);
+                        
+                        this.ui.updateProcessStatus(
+                            `Generated ${this.currentCells.length} glass pieces in ${elapsed.toFixed(0)}ms`,
+                            'info'
+                        );
+                        
+                    } catch (error) {
+                        console.error('Error generating stained glass:', error);
+                        this.ui.updateProcessStatus(`Error: ${error.message}`, 'error');
+                    } finally {
+                        this.ui.setProcessing(false);
+                    }
+                }, 10);
+            }
+        }
+
+        // ============================================================================
+        // Initialize Application
+        // ============================================================================
+        const app = new StainedGlassApp();
+    </script>
+</body>
+</html>
