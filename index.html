@@ -3414,8 +3414,11 @@
             
             async handleImageUpload(file) {
                 try {
+                    console.log('Starting image upload...');
+                    
                     // Load and preprocess image
                     this.currentImage = await this.imageLoader.loadFromFile(file);
+                    console.log('Image loaded:', this.currentImage);
                     
                     // Update UI
                     this.ui.updateStatus('Image loaded successfully', 'success');
@@ -3428,10 +3431,20 @@
                         this.currentImage.height,
                         this.currentImage.imageData
                     );
+                    console.log('Segmenter initialized');
                     
                     // Get fresh canvas element for WebGL
                     const canvas = document.getElementById('renderCanvas');
                     this.glassRenderer = new StainedGlassRenderer(canvas);
+                    console.log('Renderer initialized');
+                    
+                    // Generate initial stained glass
+                    this.generateStainedGlass();
+                    
+                } catch (error) {
+                    console.error('Error in handleImageUpload:', error);
+                    this.ui.updateStatus(`Error: ${error.message}`, 'error');
+                }
             }
             
             generateStainedGlass() {
