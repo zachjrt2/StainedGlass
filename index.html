@@ -3024,8 +3024,14 @@
             initializeEventListeners() {
                 // File input change
                 this.fileInput.addEventListener('change', (e) => {
+                    this.debugLog('File input change event fired');
+                    this.debugLog(`Files selected: ${e.target.files.length}`);
+                    
                     if (e.target.files.length > 0) {
+                        this.debugLog(`File 0: ${e.target.files[0].name}`);
                         this.handleFile(e.target.files[0]);
+                    } else {
+                        this.debugLog('No files in selection');
                     }
                 });
                 
@@ -3159,12 +3165,18 @@
                 this.updateStatus('Loading image...', 'loading');
                 
                 try {
+                    this.debugLog('handleFile called');
+                    this.debugLog(`File object: ${file ? 'exists' : 'null'}`);
+                    
                     if (this.onImageUpload) {
+                        this.debugLog('Calling onImageUpload callback...');
                         await this.onImageUpload(file);
+                    } else {
+                        this.debugError('No onImageUpload callback registered!');
                     }
                 } catch (error) {
                     this.updateStatus(`Error: ${error.message}`, 'error');
-                    console.error(error);
+                    this.debugError('handleFile failed', error);
                 }
             }
             
