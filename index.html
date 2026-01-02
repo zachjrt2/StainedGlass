@@ -827,37 +827,41 @@
         // ============================================================================
         class WebGLRenderer {
             constructor(canvas) {
-                this.canvas = canvas;
-                
-                // Try to get WebGL context with multiple fallbacks
-                this.gl = canvas.getContext('webgl2', { 
+            this.canvas = canvas;
+            this.gl = null;  // Change this - don't get context yet
+            this.program = null;
+            this.positionBuffer = null;
+            this.textures = {};  // Initialize textures object
+            this.initialized = false;
+        }
+
+        // Add this method right after the constructor
+        getContext() {
+            if (!this.gl) {
+                this.gl = this.canvas.getContext('webgl2', { 
                     alpha: false, 
                     antialias: false,
                     preserveDrawingBuffer: true 
-                }) || canvas.getContext('webgl', { 
+                }) || this.canvas.getContext('webgl', { 
                     alpha: false, 
                     antialias: false,
                     preserveDrawingBuffer: true 
-                }) || canvas.getContext('experimental-webgl', { 
+                }) || this.canvas.getContext('experimental-webgl', { 
                     alpha: false, 
                     antialias: false,
                     preserveDrawingBuffer: true 
                 });
                 
                 if (!this.gl) {
-                    console.error('WebGL context creation failed');
-                    console.error('Canvas attributes:', {
-                        width: canvas.width,
-                        height: canvas.height,
-                        existingContext: canvas.getContext ? 'available' : 'not available'
-                    });
-                    throw new Error('WebGL not supported - please try a different browser or check that hardware acceleration is enabled');
+                    throw new Error('WebGL not supported');
                 }
             }
-            
+            return this.gl;
+        }
+                    
             // Initialize shader program and buffers
             initialize() {
-                const gl = this.gl;
+                const gl = this.getContext(); 
                 
                 // Create shader program
                 this.program = this.createShaderProgram(
@@ -1268,7 +1272,7 @@
             
             // Create and compile shader program
             createShaderProgram(vertexSource, fragmentSource) {
-                const gl = this.gl;
+                const gl = this.getContext();
                 
                 const vertexShader = this.compileShader(gl.VERTEX_SHADER, vertexSource);
                 const fragmentShader = this.compileShader(gl.FRAGMENT_SHADER, fragmentSource);
@@ -1288,7 +1292,7 @@
             }
             
             compileShader(type, source) {
-                const gl = this.gl;
+                const gl = this.getContext();
                 const shader = gl.createShader(type);
                 gl.shaderSource(shader, source);
                 gl.compileShader(shader);
@@ -1304,7 +1308,7 @@
             
             // Create texture from data
             createTexture(data, width, height, format = 'RGBA') {
-                const gl = this.gl;
+                const gl = this.getContext();
                 const texture = gl.createTexture();
                 
                 gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -1325,7 +1329,7 @@
             
             // Create float texture
             createFloatTexture(data, width, height) {
-                const gl = this.gl;
+                const gl = this.getContext();
                 
                 // Convert float data to RGBA bytes (pack float into 4 bytes)
                 const byteData = new Uint8Array(width * height * 4);
@@ -1389,7 +1393,7 @@
                     this.initialize();
                 }
                 
-                const gl = this.gl;
+                const gl = this.getContext();
                 gl.useProgram(this.program);
                 
                 // Bind textures
