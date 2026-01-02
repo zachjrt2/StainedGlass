@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stained Glass Transformer</title>
-    <script src="//cdn.jsdelivr.net/npm/eruda"></script>
     <style>
         * {
             margin: 0;
@@ -222,6 +221,8 @@
                     <input type="file" id="fileInput" accept="image/*">
                 </div>
                 <div class="status" id="uploadStatus">No image loaded</div>
+                
+                <div id="debugOutput" style="display: none; margin-top: 10px; padding: 10px; background: #000; border: 1px solid #333; border-radius: 4px; font-family: monospace; font-size: 11px; max-height: 200px; overflow-y: auto; color: #0f0;"></div>
             </div>
             
             <div class="section">
@@ -3179,6 +3180,39 @@
                 }
             }
             
+            debugLog(message) {
+                const debugOutput = document.getElementById('debugOutput');
+                if (debugOutput) {
+                    debugOutput.style.display = 'block';
+                    const time = new Date().toLocaleTimeString();
+                    debugOutput.innerHTML += `[${time}] ${message}<br>`;
+                    debugOutput.scrollTop = debugOutput.scrollHeight;
+                }
+            }
+            
+            debugError(message, error) {
+                const debugOutput = document.getElementById('debugOutput');
+                if (debugOutput) {
+                    debugOutput.style.display = 'block';
+                    const time = new Date().toLocaleTimeString();
+                    debugOutput.innerHTML += `<span style="color: #f00;">[${time}] ERROR: ${message}</span><br>`;
+                    if (error) {
+                        debugOutput.innerHTML += `<span style="color: #f00;">${error.toString()}</span><br>`;
+                        if (error.stack) {
+                            debugOutput.innerHTML += `<span style="color: #f80;">${error.stack.split('\n').slice(0, 3).join('\n')}</span><br>`;
+                        }
+                    }
+                    debugOutput.scrollTop = debugOutput.scrollHeight;
+                }
+            }
+            
+            clearDebug() {
+                const debugOutput = document.getElementById('debugOutput');
+                if (debugOutput) {
+                    debugOutput.innerHTML = '';
+                }
+            }
+            
             updateProcessStatus(message, type = 'info') {
                 this.processStatus.textContent = message;
                 this.processStatus.className = 'status';
@@ -3414,12 +3448,16 @@
             }
             
             async handleImageUpload(file) {
+                this.ui.clearDebug();
+                this.ui.debugLog('Starting image upload...');
+                
                 try {
-                    console.log('Starting image upload...');
+                    this.ui.debugLog(`File: ${file.name}, Type: ${file.type}, Size: ${file.size}`);
                     
                     // Load and preprocess image
+                    this.ui.debugLog('Loading image...');
                     this.currentImage = await this.imageLoader.loadFromFile(file);
-                    console.log('Image loaded:', this.currentImage);
+                    this.ui.debugLog(`Image loaded: ${this.currentImage.width}x${this.currentImage.height}`);
                     
                     // Update UI
                     this.ui.updateStatus('Image loaded successfully', 'success');
@@ -3427,23 +3465,26 @@
                     this.ui.showGlassControls();
                     
                     // Initialize processing modules with new edge-aware segmenter
+                    this.ui.debugLog('Initializing segmenter...');
                     this.segmenter = new RegionSegmenter(
                         this.currentImage.width,
                         this.currentImage.height,
                         this.currentImage.imageData
                     );
-                    console.log('Segmenter initialized');
+                    this.ui.debugLog('Segmenter initialized');
                     
                     // Get fresh canvas element for WebGL
+                    this.ui.debugLog('Initializing renderer...');
                     const canvas = document.getElementById('renderCanvas');
                     this.glassRenderer = new StainedGlassRenderer(canvas);
-                    console.log('Renderer initialized');
+                    this.ui.debugLog('Renderer initialized');
                     
                     // Generate initial stained glass
+                    this.ui.debugLog('Generating stained glass...');
                     this.generateStainedGlass();
                     
                 } catch (error) {
-                    console.error('Error in handleImageUpload:', error);
+                    this.ui.debugError('handleImageUpload failed', error);
                     this.ui.updateStatus(`Error: ${error.message}`, 'error');
                 }
             }
@@ -3650,7 +3691,6 @@
         // Initialize Application
         // ============================================================================
         const app = new StainedGlassApp();
-        eruda.init();
     </script>
 </body>
 </html>
