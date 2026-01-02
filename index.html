@@ -853,6 +853,7 @@
                     });
                     throw new Error('WebGL not supported - please try a different browser or check that hardware acceleration is enabled');
                 }
+            }
             
             // Initialize shader program and buffers
             initialize() {
@@ -1458,7 +1459,7 @@
                 this.canvas.height = height;
             }
         }
-        }
+        
 
         // ============================================================================
         // Module: EdgeDetector
