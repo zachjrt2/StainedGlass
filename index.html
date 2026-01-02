@@ -2339,6 +2339,56 @@
             constructor(canvas) {
                 this.canvas = canvas;
                 this.ctx = canvas.getContext('2d');
+                this.webglRenderer = null;
+                this.borderRenderer = null;
+                this.borderCache = null;
+            }
+            
+            initializeBorderRenderer(width, height, seed) {
+                this.borderRenderer = new BorderRenderer(width, height);
+                this.borderRenderer.setRandomSeed(seed);
+            }
+            
+            invalidateBorderCache() {
+                this.borderCache = null;
+            }
+            
+            // Render with WebGL acceleration
+            renderWebGL(width, height, cells, cellMap, params) {
+                // Initialize WebGL renderer if needed
+                if (!this.webglRenderer) {
+                    this.webglRenderer = new WebGLRenderer(this.canvas);
+                }
+                
+                // Resize canvas
+                this.webglRenderer.resize(width, height);
+                
+                // Compute border data if not cached
+                if (!this.borderCache && this.borderRenderer) {
+                    this.borderCache = this.borderRenderer.computeBorderData(cellMap, params);
+                }
+                
+                // Generate noise texture
+                const noiseGen = new NoiseGenerator(params.seed || 0);
+                const noiseData = new Float32Array(width * height);
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        noiseData[y * width + x] = (noiseGen.noise2D(x, y) + 1) * 0.5;
+                    }
+                }
+                
+                // Upload textures to GPU
+                this.webglRenderer.uploadTextures(
+                    cellMap,
+                    cells,
+                    this.borderCache.distanceField,
+                    noiseData,
+                    width,
+                    height
+                );
+                
+                // Render with GPU shaders
+                this.webglRenderer.render(params);
             }
             
             // Render basic flat stained glass (Phase 2 - simple version)
