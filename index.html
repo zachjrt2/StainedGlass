@@ -824,23 +824,31 @@
         class WebGLRenderer {
             constructor(canvas) {
                 this.canvas = canvas;
-                this.gl = canvas.getContext('webgl', { 
+                
+                // Try to get WebGL context with multiple fallbacks
+                this.gl = canvas.getContext('webgl2', { 
+                    alpha: false, 
+                    antialias: false,
+                    preserveDrawingBuffer: true 
+                }) || canvas.getContext('webgl', { 
+                    alpha: false, 
+                    antialias: false,
+                    preserveDrawingBuffer: true 
+                }) || canvas.getContext('experimental-webgl', { 
                     alpha: false, 
                     antialias: false,
                     preserveDrawingBuffer: true 
                 });
                 
                 if (!this.gl) {
-                    throw new Error('WebGL not supported');
+                    console.error('WebGL context creation failed');
+                    console.error('Canvas attributes:', {
+                        width: canvas.width,
+                        height: canvas.height,
+                        existingContext: canvas.getContext ? 'available' : 'not available'
+                    });
+                    throw new Error('WebGL not supported - please try a different browser or check that hardware acceleration is enabled');
                 }
-                
-                this.program = null;
-                this.textures = {};
-                this.framebuffers = {};
-                this.initialized = false;
-                
-                console.log('WebGL renderer initialized');
-            }
             
             // Initialize shader program and buffers
             initialize() {
@@ -2869,8 +2877,15 @@
         class CanvasRenderer {
             constructor(canvasElement) {
                 this.canvas = canvasElement;
-                this.ctx = canvasElement.getContext('2d', { alpha: false });
+                this.ctx = null; // Don't create context yet - WebGL needs priority
                 this.currentImageData = null;
+            }
+            
+            getContext() {
+                if (!this.ctx) {
+                    this.ctx = this.canvas.getContext('2d', { alpha: false });
+                }
+                return this.ctx;
             }
             
             resize(width, height) {
@@ -2879,19 +2894,20 @@
             }
             
             clear() {
-                this.ctx.fillStyle = '#0a0a0a';
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                const ctx = this.getContext();
+                ctx.fillStyle = '#0a0a0a';
+                ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             }
             
             drawImageData(imageData) {
                 this.currentImageData = imageData;
                 this.resize(imageData.width, imageData.height);
-                this.ctx.putImageData(imageData, 0, 0);
+                this.getContext().putImageData(imageData, 0, 0);
             }
             
             drawProcessedImage(processedImage) {
                 this.resize(processedImage.width, processedImage.height);
-                this.ctx.drawImage(processedImage.canvas, 0, 0);
+                this.getContext().drawImage(processedImage.canvas, 0, 0);
             }
             
             getCanvas() {
