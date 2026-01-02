@@ -1,0 +1,3581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stained Glass Transformer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+        
+        #app {
+            display: flex;
+            height: 100vh;
+        }
+        
+        #sidebar {
+            width: 320px;
+            background: #242424;
+            border-right: 1px solid #333;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        
+        #canvas-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0a0a0a;
+            position: relative;
+        }
+        
+        #renderCanvas {
+            max-width: 100%;
+            max-height: 100%;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        
+        .upload-area {
+            border: 2px dashed #555;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        
+        .upload-area:hover {
+            border-color: #888;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .upload-area.dragging {
+            border-color: #4a9eff;
+            background: rgba(74, 158, 255, 0.1);
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .btn {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #3a8eef;
+        }
+        
+        .btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        .btn.secondary {
+            background: #666;
+        }
+        
+        .btn.secondary:hover:not(:disabled) {
+            background: #777;
+        }
+        
+        h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #888;
+            padding: 8px;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+        
+        .status.success {
+            color: #88cc88;
+            background: rgba(136, 204, 136, 0.1);
+        }
+        
+        .status.error {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+        }
+        
+        .status.loading {
+            color: #4a9eff;
+            background: rgba(74, 158, 255, 0.1);
+        }
+        
+        .keyboard-hint {
+            font-size: 11px;
+            color: #666;
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+        }
+        
+        .keyboard-hint code {
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .section:last-child {
+            border-bottom: none;
+        }
+        
+        .slider-group {
+            margin-bottom: 15px;
+        }
+        
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 13px;
+            color: #ccc;
+        }
+        
+        .slider-value {
+            color: #4a9eff;
+            font-weight: 600;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #333;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4a9eff;
+            cursor: pointer;
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4a9eff;
+            cursor: pointer;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="sidebar">
+            <div class="section">
+                <h2>Image Upload</h2>
+                <div class="upload-area" id="uploadArea">
+                    <div style="font-size: 48px; margin-bottom: 10px;">📷</div>
+                    <div style="margin-bottom: 10px;">Drag & drop an image here</div>
+                    <button class="btn" onclick="document.getElementById('fileInput').click()">
+                        Choose File
+                    </button>
+                    <input type="file" id="fileInput" accept="image/*">
+                </div>
+                <div class="status" id="uploadStatus">No image loaded</div>
+            </div>
+            
+            <div class="section">
+                <h2>Info</h2>
+                <div id="imageInfo" style="font-size: 13px; color: #aaa;">
+                    Awaiting image upload...
+                </div>
+            </div>
+            
+            <div class="section" id="glassSection" style="display: none;">
+                <h2>Region Segmentation</h2>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Edge Sensitivity</span>
+                        <span class="slider-value" id="edgeSensitivityValue">0.3</span>
+                    </div>
+                    <input type="range" id="edgeSensitivity" min="0.1" max="0.8" value="0.3" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Edge Blur Radius</span>
+                        <span class="slider-value" id="edgeBlurValue">1.5</span>
+                    </div>
+                    <input type="range" id="edgeBlur" min="0" max="5" value="1.5" step="0.5">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Min Region Area</span>
+                        <span class="slider-value" id="minRegionAreaValue">200</span>
+                    </div>
+                    <input type="range" id="minRegionArea" min="50" max="1000" value="200" step="50">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Max Region Area</span>
+                        <span class="slider-value" id="maxRegionAreaValue">5000</span>
+                    </div>
+                    <input type="range" id="maxRegionArea" min="1000" max="20000" value="5000" step="500">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Subdivision Density</span>
+                        <span class="slider-value" id="subdivDensityValue">0.5</span>
+                    </div>
+                    <input type="range" id="subdivDensity" min="0.1" max="1" value="0.5" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Subdivision Randomness</span>
+                        <span class="slider-value" id="subdivRandomValue">0.4</span>
+                    </div>
+                    <input type="range" id="subdivRandom" min="0" max="1" value="0.4" step="0.05">
+                </div>
+                
+                <button class="btn" id="regenerateBtn" style="width: 100%; margin-top: 10px;">
+                    Regenerate Glass
+                </button>
+                
+                <div class="status" id="processStatus" style="margin-top: 10px;"></div>
+            </div>
+            
+            <div class="section" id="borderSection" style="display: none;">
+                <h2>Lead Lines / Borders</h2>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Border Thickness</span>
+                        <span class="slider-value" id="borderThicknessValue">3</span>
+                    </div>
+                    <input type="range" id="borderThickness" min="1" max="10" value="3" step="0.5">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Border Irregularity</span>
+                        <span class="slider-value" id="borderIrregularityValue">0.3</span>
+                    </div>
+                    <input type="range" id="borderIrregularity" min="0" max="1" value="0.3" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Border Depth</span>
+                        <span class="slider-value" id="borderDepthValue">0.5</span>
+                    </div>
+                    <input type="range" id="borderDepth" min="0" max="1" value="0.5" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Border Softness</span>
+                        <span class="slider-value" id="borderSoftnessValue">0.4</span>
+                    </div>
+                    <input type="range" id="borderSoftness" min="0" max="1" value="0.4" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Border Brightness</span>
+                        <span class="slider-value" id="borderBrightnessValue">0.15</span>
+                    </div>
+                    <input type="range" id="borderBrightness" min="0" max="0.5" value="0.15" step="0.05">
+                </div>
+                
+                <button class="btn" id="updateBordersBtn" style="width: 100%; margin-top: 10px;">
+                    Update Borders
+                </button>
+            </div>
+            
+            <div class="section" id="glassSection2" style="display: none;">
+                <h2>Glass Material</h2>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Glass Thickness</span>
+                        <span class="slider-value" id="glassThicknessValue">0.5</span>
+                    </div>
+                    <input type="range" id="glassThickness" min="0" max="1" value="0.5" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Surface Distortion</span>
+                        <span class="slider-value" id="distortionStrengthValue">0.15</span>
+                    </div>
+                    <input type="range" id="distortionStrength" min="0" max="0.5" value="0.15" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Distortion Scale</span>
+                        <span class="slider-value" id="distortionScaleValue">10</span>
+                    </div>
+                    <input type="range" id="distortionScale" min="5" max="30" value="10" step="1">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Bevel Amount</span>
+                        <span class="slider-value" id="bevelAmountValue">0.3</span>
+                    </div>
+                    <input type="range" id="bevelAmount" min="0" max="1" value="0.3" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Bevel Width</span>
+                        <span class="slider-value" id="bevelWidthValue">0.15</span>
+                    </div>
+                    <input type="range" id="bevelWidth" min="0.05" max="0.5" value="0.15" step="0.05">
+                </div>
+                
+                <button class="btn" id="updateMaterialBtn" style="width: 100%; margin-top: 10px;">
+                    Update Material
+                </button>
+            </div>
+            
+            <div class="section" id="lightingSection" style="display: none;">
+                <h2>Lighting</h2>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Backlight Strength</span>
+                        <span class="slider-value" id="backlightValue">0.8</span>
+                    </div>
+                    <input type="range" id="backlight" min="0" max="2" value="0.8" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Light Angle</span>
+                        <span class="slider-value" id="lightAngleValue">45</span>
+                    </div>
+                    <input type="range" id="lightAngle" min="0" max="360" value="45" step="5">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Ambient Light</span>
+                        <span class="slider-value" id="ambientLightValue">0.2</span>
+                    </div>
+                    <input type="range" id="ambientLight" min="0" max="1" value="0.2" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Bloom Strength</span>
+                        <span class="slider-value" id="bloomStrengthValue">0.3</span>
+                    </div>
+                    <input type="range" id="bloomStrength" min="0" max="1" value="0.3" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Lead Shadow</span>
+                        <span class="slider-value" id="leadShadowValue">0.4</span>
+                    </div>
+                    <input type="range" id="leadShadow" min="0" max="1" value="0.4" step="0.05">
+                </div>
+                
+                <button class="btn" id="updateLightingBtn" style="width: 100%; margin-top: 10px;">
+                    Update Lighting
+                </button>
+            </div>
+            
+            <div class="section" id="colorSection" style="display: none;">
+                <h2>Color & Appearance</h2>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Color Quantization</span>
+                        <span class="slider-value" id="colorQuantValue">8</span>
+                    </div>
+                    <input type="range" id="colorQuant" min="2" max="32" value="8" step="1">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Saturation Boost</span>
+                        <span class="slider-value" id="saturationValue">1.0</span>
+                    </div>
+                    <input type="range" id="saturation" min="0.5" max="2" value="1.0" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Luminance Bias</span>
+                        <span class="slider-value" id="luminanceBiasValue">0.0</span>
+                    </div>
+                    <input type="range" id="luminanceBias" min="-0.3" max="0.3" value="0.0" step="0.05">
+                </div>
+                
+                <button class="btn" id="updateColorBtn" style="width: 100%; margin-top: 10px;">
+                    Update Colors
+                </button>
+            </div>
+            
+            <div class="section" id="agingSection" style="display: none;">
+                <h2>Aging & Weathering</h2>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Dirt/Dust</span>
+                        <span class="slider-value" id="dirtAmountValue">0.0</span>
+                    </div>
+                    <input type="range" id="dirtAmount" min="0" max="1" value="0.0" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Crack Intensity</span>
+                        <span class="slider-value" id="crackIntensityValue">0.0</span>
+                    </div>
+                    <input type="range" id="crackIntensity" min="0" max="1" value="0.0" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Glass Cloudiness</span>
+                        <span class="slider-value" id="cloudinessValue">0.0</span>
+                    </div>
+                    <input type="range" id="cloudiness" min="0" max="1" value="0.0" step="0.05">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Lead Aging</span>
+                        <span class="slider-value" id="leadAgingValue">0.0</span>
+                    </div>
+                    <input type="range" id="leadAging" min="0" max="1" value="0.0" step="0.05">
+                </div>
+                
+                <button class="btn" id="updateAgingBtn" style="width: 100%; margin-top: 10px;">
+                    Update Aging
+                </button>
+            </div>
+            
+            <div class="section" id="presetsSection" style="display: none;">
+                <h2>Presets & Export</h2>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="font-size: 13px; color: #ccc; display: block; margin-bottom: 5px;">
+                        Style Preset
+                    </label>
+                    <select id="presetSelect" style="width: 100%; padding: 8px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; font-size: 13px;">
+                        <option value="">Choose a preset...</option>
+                        <option value="modern">Clean Modern</option>
+                        <option value="cathedral">Aged Cathedral</option>
+                        <option value="artNouveau">Art Nouveau</option>
+                        <option value="vivid">Vivid Backlit</option>
+                        <option value="subtle">Subtle & Organic</option>
+                        <option value="weathered">Heavily Weathered</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="font-size: 13px; color: #ccc; display: block; margin-bottom: 5px;">
+                        Random Seed
+                    </label>
+                    <div style="display: flex; gap: 5px;">
+                        <input type="number" id="seedInput" value="0" 
+                               style="flex: 1; padding: 8px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; font-size: 13px;">
+                        <button class="btn" id="randomSeedBtn" style="padding: 8px 15px;">
+                            🎲
+                        </button>
+                    </div>
+                </div>
+                
+                <button class="btn" id="exportBtn" style="width: 100%; margin-bottom: 10px;">
+                    💾 Export Image
+                </button>
+                
+                <button class="btn secondary" id="resetAllBtn" style="width: 100%;">
+                    ↺ Reset All Settings
+                </button>
+                
+                <div class="keyboard-hint">
+                    💡 Shortcuts: <code>E</code> Export | <code>R</code> Regenerate
+                </div>
+            </div>
+        </div>
+        
+        <div id="canvas-container">
+            <canvas id="renderCanvas"></canvas>
+        </div>
+    </div>
+
+    <script type="module">
+        // ============================================================================
+        // Module: PresetManager
+        // Manages style presets and parameter configurations
+        // ============================================================================
+        class PresetManager {
+            constructor() {
+                this.presets = {
+                    modern: {
+                        name: "Clean Modern",
+                        segmentation: {
+                            edgeSensitivity: 0.25,
+                            edgeBlur: 2,
+                            minRegionArea: 300,
+                            maxRegionArea: 8000,
+                            subdivDensity: 0.4,
+                            subdivRandom: 0.2
+                        },
+                        render: {
+                            borderThickness: 2.5,
+                            borderIrregularity: 0.1,
+                            borderDepth: 0.3,
+                            borderSoftness: 0.2,
+                            borderBrightness: 0.2,
+                            glassThickness: 0.3,
+                            distortionStrength: 0.05,
+                            distortionScale: 15,
+                            bevelAmount: 0.4,
+                            bevelWidth: 0.2,
+                            backlight: 1.0,
+                            lightAngle: 45,
+                            ambientLight: 0.25,
+                            bloomStrength: 0.4,
+                            leadShadow: 0.2,
+                            colorQuant: 12,
+                            saturation: 1.2,
+                            luminanceBias: 0.05,
+                            dirtAmount: 0,
+                            crackIntensity: 0,
+                            cloudiness: 0,
+                            leadAging: 0
+                        }
+                    },
+                    cathedral: {
+                        name: "Aged Cathedral",
+                        segmentation: {
+                            edgeSensitivity: 0.35,
+                            edgeBlur: 1.5,
+                            minRegionArea: 250,
+                            maxRegionArea: 6000,
+                            subdivDensity: 0.6,
+                            subdivRandom: 0.5
+                        },
+                        render: {
+                            borderThickness: 4,
+                            borderIrregularity: 0.5,
+                            borderDepth: 0.7,
+                            borderSoftness: 0.5,
+                            borderBrightness: 0.1,
+                            glassThickness: 0.6,
+                            distortionStrength: 0.2,
+                            distortionScale: 12,
+                            bevelAmount: 0.3,
+                            bevelWidth: 0.15,
+                            backlight: 0.6,
+                            lightAngle: 60,
+                            ambientLight: 0.15,
+                            bloomStrength: 0.2,
+                            leadShadow: 0.6,
+                            colorQuant: 8,
+                            saturation: 0.9,
+                            luminanceBias: -0.1,
+                            dirtAmount: 0.3,
+                            crackIntensity: 0.15,
+                            cloudiness: 0.25,
+                            leadAging: 0.5
+                        }
+                    },
+                    artNouveau: {
+                        name: "Art Nouveau",
+                        segmentation: {
+                            edgeSensitivity: 0.3,
+                            edgeBlur: 2,
+                            minRegionArea: 200,
+                            maxRegionArea: 7000,
+                            subdivDensity: 0.7,
+                            subdivRandom: 0.6
+                        },
+                        render: {
+                            borderThickness: 3.5,
+                            borderIrregularity: 0.4,
+                            borderDepth: 0.5,
+                            borderSoftness: 0.4,
+                            borderBrightness: 0.15,
+                            glassThickness: 0.4,
+                            distortionStrength: 0.15,
+                            distortionScale: 10,
+                            bevelAmount: 0.5,
+                            bevelWidth: 0.25,
+                            backlight: 0.9,
+                            lightAngle: 30,
+                            ambientLight: 0.2,
+                            bloomStrength: 0.35,
+                            leadShadow: 0.4,
+                            colorQuant: 16,
+                            saturation: 1.4,
+                            luminanceBias: 0.0,
+                            dirtAmount: 0.05,
+                            crackIntensity: 0,
+                            cloudiness: 0.05,
+                            leadAging: 0.15
+                        }
+                    },
+                    vivid: {
+                        name: "Vivid Backlit",
+                        segmentation: {
+                            edgeSensitivity: 0.25,
+                            edgeBlur: 2.5,
+                            minRegionArea: 300,
+                            maxRegionArea: 10000,
+                            subdivDensity: 0.4,
+                            subdivRandom: 0.3
+                        },
+                        render: {
+                            borderThickness: 2,
+                            borderIrregularity: 0.2,
+                            borderDepth: 0.4,
+                            borderSoftness: 0.3,
+                            borderBrightness: 0.1,
+                            glassThickness: 0.2,
+                            distortionStrength: 0.1,
+                            distortionScale: 18,
+                            bevelAmount: 0.6,
+                            bevelWidth: 0.3,
+                            backlight: 1.5,
+                            lightAngle: 45,
+                            ambientLight: 0.1,
+                            bloomStrength: 0.6,
+                            leadShadow: 0.3,
+                            colorQuant: 20,
+                            saturation: 1.6,
+                            luminanceBias: 0.1,
+                            dirtAmount: 0,
+                            crackIntensity: 0,
+                            cloudiness: 0,
+                            leadAging: 0
+                        }
+                    },
+                    subtle: {
+                        name: "Subtle & Organic",
+                        segmentation: {
+                            edgeSensitivity: 0.4,
+                            edgeBlur: 1,
+                            minRegionArea: 150,
+                            maxRegionArea: 5000,
+                            subdivDensity: 0.8,
+                            subdivRandom: 0.7
+                        },
+                        render: {
+                            borderThickness: 2.5,
+                            borderIrregularity: 0.6,
+                            borderDepth: 0.4,
+                            borderSoftness: 0.6,
+                            borderBrightness: 0.18,
+                            glassThickness: 0.5,
+                            distortionStrength: 0.25,
+                            distortionScale: 8,
+                            bevelAmount: 0.2,
+                            bevelWidth: 0.1,
+                            backlight: 0.7,
+                            lightAngle: 90,
+                            ambientLight: 0.3,
+                            bloomStrength: 0.15,
+                            leadShadow: 0.3,
+                            colorQuant: 6,
+                            saturation: 1.0,
+                            luminanceBias: 0.0,
+                            dirtAmount: 0.1,
+                            crackIntensity: 0,
+                            cloudiness: 0.1,
+                            leadAging: 0.2
+                        }
+                    },
+                    weathered: {
+                        name: "Heavily Weathered",
+                        segmentation: {
+                            edgeSensitivity: 0.35,
+                            edgeBlur: 1,
+                            minRegionArea: 200,
+                            maxRegionArea: 5000,
+                            subdivDensity: 0.7,
+                            subdivRandom: 0.6
+                        },
+                        render: {
+                            borderThickness: 4.5,
+                            borderIrregularity: 0.7,
+                            borderDepth: 0.8,
+                            borderSoftness: 0.6,
+                            borderBrightness: 0.08,
+                            glassThickness: 0.7,
+                            distortionStrength: 0.3,
+                            distortionScale: 10,
+                            bevelAmount: 0.15,
+                            bevelWidth: 0.1,
+                            backlight: 0.4,
+                            lightAngle: 75,
+                            ambientLight: 0.1,
+                            bloomStrength: 0.1,
+                            leadShadow: 0.7,
+                            colorQuant: 5,
+                            saturation: 0.7,
+                            luminanceBias: -0.15,
+                            dirtAmount: 0.6,
+                            crackIntensity: 0.4,
+                            cloudiness: 0.5,
+                            leadAging: 0.8
+                        }
+                    }
+                };
+            }
+            
+            getPreset(name) {
+                return this.presets[name];
+            }
+            
+            getAllPresetNames() {
+                return Object.keys(this.presets);
+            }
+        }
+
+        // ============================================================================
+        // Module: ImageExporter
+        // Handles image export functionality
+        // ============================================================================
+        class ImageExporter {
+            constructor(canvas) {
+                this.canvas = canvas;
+            }
+            
+            exportImage(filename = 'stained-glass') {
+                try {
+                    // Create download link
+                    this.canvas.toBlob((blob) => {
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `${filename}-${Date.now()}.png`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                        
+                        console.log('Image exported successfully');
+                    }, 'image/png');
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Export failed:', error);
+                    return false;
+                }
+            }
+        }
+
+        // ============================================================================
+        // Module: WebGLRenderer
+        // GPU-accelerated rendering with shaders for real-time effects
+        // ============================================================================
+        class WebGLRenderer {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.gl = canvas.getContext('webgl', { 
+                    alpha: false, 
+                    antialias: false,
+                    preserveDrawingBuffer: true 
+                });
+                
+                if (!this.gl) {
+                    throw new Error('WebGL not supported');
+                }
+                
+                this.program = null;
+                this.textures = {};
+                this.framebuffers = {};
+                this.initialized = false;
+                
+                console.log('WebGL renderer initialized');
+            }
+            
+            // Initialize shader program and buffers
+            initialize() {
+                const gl = this.gl;
+                
+                // Create shader program
+                this.program = this.createShaderProgram(
+                    this.getVertexShader(),
+                    this.getFragmentShader()
+                );
+                
+                // Create fullscreen quad
+                const positions = new Float32Array([
+                    -1, -1,
+                     1, -1,
+                    -1,  1,
+                     1,  1
+                ]);
+                
+                this.positionBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+                
+                // Set up attributes
+                const positionLocation = gl.getAttribLocation(this.program, 'a_position');
+                gl.enableVertexAttribArray(positionLocation);
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+                gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+                
+                this.initialized = true;
+                console.log('WebGL shaders compiled and ready');
+            }
+            
+            // Vertex shader: simple fullscreen quad
+            getVertexShader() {
+                return `
+                    attribute vec2 a_position;
+                    varying vec2 v_texCoord;
+                    
+                    void main() {
+                        gl_Position = vec4(a_position, 0.0, 1.0);
+                        // Convert from clip space (-1 to 1) to texture space (0 to 1)
+                        v_texCoord = a_position * 0.5 + 0.5;
+                    }
+                `;
+            }
+            
+            // Fragment shader: stained glass effect with all material properties
+            getFragmentShader() {
+                return `
+                    precision mediump float;
+                    
+                    varying vec2 v_texCoord;
+                    
+                    // Textures
+                    uniform sampler2D u_cellMap;         // Region ID map
+                    uniform sampler2D u_colorMap;        // Base colors per cell
+                    uniform sampler2D u_distanceField;   // Distance to borders
+                    uniform sampler2D u_noiseTexture;    // Perlin noise
+                    
+                    // Dimensions
+                    uniform vec2 u_resolution;
+                    
+                    // Border parameters
+                    uniform float u_borderThickness;
+                    uniform float u_borderIrregularity;
+                    uniform float u_borderDepth;
+                    uniform float u_borderSoftness;
+                    uniform float u_borderBrightness;
+                    
+                    // Glass material parameters
+                    uniform float u_glassThickness;
+                    uniform float u_distortionStrength;
+                    uniform float u_distortionScale;
+                    uniform float u_bevelAmount;
+                    uniform float u_bevelWidth;
+                    
+                    // Lighting parameters
+                    uniform float u_backlightStrength;
+                    uniform vec2 u_lightDirection;
+                    uniform float u_ambientLight;
+                    uniform float u_bloomStrength;
+                    uniform float u_leadShadow;
+                    
+                    // Color parameters
+                    uniform float u_colorQuant;
+                    uniform float u_saturation;
+                    uniform float u_luminanceBias;
+                    
+                    // Aging parameters
+                    uniform float u_dirtAmount;
+                    uniform float u_crackIntensity;
+                    uniform float u_cloudiness;
+                    uniform float u_leadAging;
+                    
+                    // Helper: Get cell ID at position
+                    float getCellId(vec2 uv) {
+                        vec4 cell = texture2D(u_cellMap, uv);
+                        return cell.r + cell.g * 255.0 + cell.b * 65025.0;
+                    }
+                    
+                    // Helper: Get cell color
+                    vec3 getCellColor(float cellId) {
+                        // Map cell ID to texture coordinate
+                        float u = mod(cellId, 256.0) / 256.0;
+                        float v = floor(cellId / 256.0) / 256.0;
+                        return texture2D(u_colorMap, vec2(u, v)).rgb;
+                    }
+                    
+                    // Helper: Get distance to border
+                    float getBorderDistance(vec2 uv) {
+                        return texture2D(u_distanceField, uv).r;
+                    }
+                    
+                    // Helper: Get noise value
+                    float getNoise(vec2 uv) {
+                        return texture2D(u_noiseTexture, uv).r;
+                    }
+                    
+                    // RGB to HSL conversion
+                    vec3 rgb2hsl(vec3 rgb) {
+                        float maxVal = max(max(rgb.r, rgb.g), rgb.b);
+                        float minVal = min(min(rgb.r, rgb.g), rgb.b);
+                        float delta = maxVal - minVal;
+                        
+                        float l = (maxVal + minVal) / 2.0;
+                        
+                        if (delta < 0.00001) {
+                            return vec3(0.0, 0.0, l);
+                        }
+                        
+                        float s = l < 0.5 ? delta / (maxVal + minVal) : delta / (2.0 - maxVal - minVal);
+                        
+                        float h;
+                        if (rgb.r == maxVal) {
+                            h = (rgb.g - rgb.b) / delta;
+                        } else if (rgb.g == maxVal) {
+                            h = 2.0 + (rgb.b - rgb.r) / delta;
+                        } else {
+                            h = 4.0 + (rgb.r - rgb.g) / delta;
+                        }
+                        h = h / 6.0;
+                        if (h < 0.0) h += 1.0;
+                        
+                        return vec3(h, s, l);
+                    }
+                    
+                    // HSL to RGB conversion
+                    vec3 hsl2rgb(vec3 hsl) {
+                        float h = hsl.x;
+                        float s = hsl.y;
+                        float l = hsl.z;
+                        
+                        if (s < 0.00001) {
+                            return vec3(l);
+                        }
+                        
+                        float q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+                        float p = 2.0 * l - q;
+                        
+                        float hue2rgb(float p, float q, float t) {
+                            if (t < 0.0) t += 1.0;
+                            if (t > 1.0) t -= 1.0;
+                            if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
+                            if (t < 1.0/2.0) return q;
+                            if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
+                            return p;
+                        }
+                        
+                        return vec3(
+                            hue2rgb(p, q, h + 1.0/3.0),
+                            hue2rgb(p, q, h),
+                            hue2rgb(p, q, h - 1.0/3.0)
+                        );
+                    }
+                    
+                    // Color quantization
+                    vec3 quantizeColor(vec3 color, float levels) {
+                        if (levels < 2.5) return color;
+                        
+                        vec3 hsl = rgb2hsl(color);
+                        
+                        // Quantize hue and saturation
+                        hsl.x = floor(hsl.x * levels) / levels;
+                        hsl.y = floor(hsl.y * (levels * 0.5)) / (levels * 0.5);
+                        
+                        return hsl2rgb(hsl);
+                    }
+                    
+                    // Apply saturation boost
+                    vec3 adjustSaturation(vec3 color, float satBoost) {
+                        vec3 hsl = rgb2hsl(color);
+                        hsl.y = clamp(hsl.y * satBoost, 0.0, 1.0);
+                        return hsl2rgb(hsl);
+                    }
+                    
+                    // Compute border effect
+                    float computeBorderAlpha(float dist, vec2 uv) {
+                        // Add noise-based irregularity
+                        float noise = getNoise(uv * u_distortionScale);
+                        dist += (noise - 0.5) * u_borderIrregularity * 0.3;
+                        
+                        // Compute border intensity
+                        float threshold = u_borderThickness / 100.0;
+                        
+                        if (dist < threshold) {
+                            float t = dist / threshold;
+                            // Apply softness
+                            float softT = pow(t, 1.0 + u_borderSoftness * 3.0);
+                            return 1.0 - softT;
+                        }
+                        
+                        return 0.0;
+                    }
+                    
+                    // Compute bevel highlight based on distance field gradient
+                    float computeBevel(vec2 uv, float dist) {
+                        if (dist > u_bevelWidth) return 0.0;
+                        
+                        // Sample distance field neighbors for gradient
+                        float pixelSize = 1.0 / u_resolution.x;
+                        float dx = getBorderDistance(uv + vec2(pixelSize, 0.0)) - 
+                                   getBorderDistance(uv - vec2(pixelSize, 0.0));
+                        float dy = getBorderDistance(uv + vec2(0.0, pixelSize)) - 
+                                   getBorderDistance(uv - vec2(0.0, pixelSize));
+                        
+                        // Gradient direction
+                        vec2 grad = normalize(vec2(dx, dy));
+                        
+                        // Dot with light direction for highlight
+                        float highlight = max(0.0, dot(grad, u_lightDirection));
+                        
+                        // Fade based on distance from edge
+                        float bevelFade = 1.0 - (dist / u_bevelWidth);
+                        
+                        return highlight * bevelFade * u_bevelAmount;
+                    }
+                    
+                    // Apply glass thickness effect (darker = thicker)
+                    vec3 applyThickness(vec3 color, float thickness) {
+                        // Thicker glass absorbs more light
+                        float absorption = thickness * 0.5;
+                        return color * (1.0 - absorption);
+                    }
+                    
+                    // Apply surface distortion
+                    vec2 applyDistortion(vec2 uv) {
+                        if (u_distortionStrength < 0.01) return uv;
+                        
+                        // Sample noise at multiple scales
+                        vec2 offset1 = vec2(
+                            getNoise(uv * u_distortionScale) - 0.5,
+                            getNoise(uv * u_distortionScale + vec2(100.0, 100.0)) - 0.5
+                        );
+                        
+                        vec2 offset2 = vec2(
+                            getNoise(uv * u_distortionScale * 2.0 + vec2(200.0, 0.0)) - 0.5,
+                            getNoise(uv * u_distortionScale * 2.0 + vec2(0.0, 200.0)) - 0.5
+                        );
+                        
+                        vec2 offset = (offset1 + offset2 * 0.5) * u_distortionStrength * 0.02;
+                        
+                        return uv + offset;
+                    }
+                    
+                    // Apply dirt and dust overlay
+                    vec3 applyDirt(vec3 color, vec2 uv) {
+                        if (u_dirtAmount < 0.01) return color;
+                        
+                        // Multi-scale dirt noise
+                        float dirt = getNoise(uv * 50.0) * 0.6 + 
+                                     getNoise(uv * 150.0) * 0.3 +
+                                     getNoise(uv * 400.0) * 0.1;
+                        
+                        // Dirt darkens and desaturates
+                        float dirtFactor = 1.0 - u_dirtAmount * dirt * 0.5;
+                        return color * dirtFactor;
+                    }
+                    
+                    // Apply crack overlay
+                    vec3 applyCracks(vec3 color, vec2 uv, float dist) {
+                        if (u_crackIntensity < 0.01) return color;
+                        
+                        // Generate cracks using noise
+                        float crackNoise = getNoise(uv * 200.0 + vec2(500.0, 500.0));
+                        
+                        // Cracks appear as thin dark lines
+                        float crackThreshold = 0.5 + u_crackIntensity * 0.3;
+                        if (crackNoise > crackThreshold) {
+                            float crackStrength = (crackNoise - crackThreshold) / (1.0 - crackThreshold);
+                            float crack = 1.0 - crackStrength * u_crackIntensity * 0.7;
+                            return color * crack;
+                        }
+                        
+                        return color;
+                    }
+                    
+                    // Apply glass cloudiness/aging
+                    vec3 applyCloudiness(vec3 color, vec2 uv) {
+                        if (u_cloudiness < 0.01) return color;
+                        
+                        // Cloudy glass reduces color intensity and adds whitish cast
+                        float cloudNoise = getNoise(uv * 80.0 + vec2(1000.0, 1000.0));
+                        float cloudAmount = cloudNoise * u_cloudiness;
+                        
+                        vec3 cloudColor = vec3(0.9, 0.9, 0.85); // Slight warm tint
+                        return mix(color, cloudColor, cloudAmount * 0.4);
+                    }
+                    
+                    // Compute bloom effect
+                    vec3 computeBloom(vec3 color, float brightness) {
+                        if (u_bloomStrength < 0.01) return vec3(0.0);
+                        
+                        // Bloom on bright areas
+                        float luminance = dot(color, vec3(0.299, 0.587, 0.114));
+                        
+                        if (luminance > 0.6) {
+                            float bloomAmount = (luminance - 0.6) / 0.4;
+                            return color * bloomAmount * u_bloomStrength * 0.5;
+                        }
+                        
+                        return vec3(0.0);
+                    }
+                    
+                    void main() {
+                        vec2 uv = v_texCoord;
+                        
+                        // Apply surface distortion to lookup
+                        vec2 distortedUv = applyDistortion(uv);
+                        distortedUv = clamp(distortedUv, 0.0, 1.0);
+                        
+                        // Get cell info
+                        float cellId = getCellId(distortedUv);
+                        vec3 baseColor = getCellColor(cellId);
+                        
+                        // Apply color quantization
+                        baseColor = quantizeColor(baseColor, u_colorQuant);
+                        
+                        // Apply saturation adjustment
+                        baseColor = adjustSaturation(baseColor, u_saturation);
+                        
+                        // Get distance to border
+                        float borderDist = getBorderDistance(uv);
+                        
+                        // Start with base glass color
+                        vec3 color = baseColor;
+                        
+                        // Apply glass thickness effect
+                        color = applyThickness(color, u_glassThickness);
+                        
+                        // Apply luminance bias
+                        color += vec3(u_luminanceBias);
+                        
+                        // Apply backlight (makes glass glow)
+                        color *= (1.0 + u_backlightStrength);
+                        
+                        // Apply cloudiness
+                        color = applyCloudiness(color, uv);
+                        
+                        // Add ambient light
+                        color += vec3(u_ambientLight);
+                        
+                        // Add bevel highlights near edges
+                        float bevel = computeBevel(uv, borderDist);
+                        color += vec3(bevel * 0.5);
+                        
+                        // Apply dirt/dust
+                        color = applyDirt(color, uv);
+                        
+                        // Apply cracks
+                        color = applyCracks(color, uv, borderDist);
+                        
+                        // Compute bloom
+                        vec3 bloom = computeBloom(color, u_backlightStrength);
+                        color += bloom;
+                        
+                        // Compute and apply border
+                        float borderAlpha = computeBorderAlpha(borderDist, uv);
+                        
+                        if (borderAlpha > 0.01) {
+                            // Lead color with depth
+                            float shadowAmount = u_borderDepth * (1.0 - borderDist / (u_borderThickness / 100.0));
+                            
+                            // Additional shadow from lead shadow parameter
+                            shadowAmount += u_leadShadow * 0.3;
+                            
+                            float shadowFactor = 1.0 - clamp(shadowAmount, 0.0, 0.8);
+                            
+                            vec3 leadColor = vec3(u_borderBrightness) * shadowFactor;
+                            
+                            // Add slight color tint from glass
+                            leadColor += baseColor * 0.1;
+                            
+                            // Apply lead aging (oxidation/patina)
+                            if (u_leadAging > 0.01) {
+                                float agingNoise = getNoise(uv * 100.0 + vec2(2000.0, 2000.0));
+                                vec3 patinaColor = vec3(0.3, 0.35, 0.3); // Greenish patina
+                                leadColor = mix(leadColor, patinaColor, agingNoise * u_leadAging * 0.6);
+                            }
+                            
+                            // Blend border with glass
+                            color = mix(color, leadColor, borderAlpha);
+                        }
+                        
+                        // Final clamp
+                        color = clamp(color, 0.0, 1.0);
+                        
+                        gl_FragColor = vec4(color, 1.0);
+                    }
+                `;
+            }
+            
+            // Create and compile shader program
+            createShaderProgram(vertexSource, fragmentSource) {
+                const gl = this.gl;
+                
+                const vertexShader = this.compileShader(gl.VERTEX_SHADER, vertexSource);
+                const fragmentShader = this.compileShader(gl.FRAGMENT_SHADER, fragmentSource);
+                
+                const program = gl.createProgram();
+                gl.attachShader(program, vertexShader);
+                gl.attachShader(program, fragmentShader);
+                gl.linkProgram(program);
+                
+                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                    console.error('Shader program link error:', gl.getProgramInfoLog(program));
+                    throw new Error('Failed to link shader program');
+                }
+                
+                gl.useProgram(program);
+                return program;
+            }
+            
+            compileShader(type, source) {
+                const gl = this.gl;
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+                    console.error('Shader source:', source);
+                    throw new Error('Failed to compile shader');
+                }
+                
+                return shader;
+            }
+            
+            // Create texture from data
+            createTexture(data, width, height, format = 'RGBA') {
+                const gl = this.gl;
+                const texture = gl.createTexture();
+                
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                
+                const glFormat = format === 'RGBA' ? gl.RGBA : 
+                                 format === 'RGB' ? gl.RGB : 
+                                 gl.LUMINANCE;
+                
+                gl.texImage2D(gl.TEXTURE_2D, 0, glFormat, width, height, 0, 
+                              glFormat, gl.UNSIGNED_BYTE, data);
+                
+                return texture;
+            }
+            
+            // Create float texture
+            createFloatTexture(data, width, height) {
+                const gl = this.gl;
+                
+                // Convert float data to RGBA bytes (pack float into 4 bytes)
+                const byteData = new Uint8Array(width * height * 4);
+                for (let i = 0; i < data.length; i++) {
+                    const value = Math.floor(data[i] * 255);
+                    byteData[i * 4] = value;
+                    byteData[i * 4 + 1] = value;
+                    byteData[i * 4 + 2] = value;
+                    byteData[i * 4 + 3] = 255;
+                }
+                
+                return this.createTexture(byteData, width, height, 'RGBA');
+            }
+            
+            // Upload textures for rendering
+            uploadTextures(cellMap, cells, distanceField, noiseData, width, height) {
+                console.log('Uploading textures to GPU...');
+                
+                // Convert cell map to RGB texture (pack 16-bit into RGB)
+                const cellMapRGB = new Uint8Array(width * height * 4);
+                for (let i = 0; i < cellMap.length; i++) {
+                    const id = cellMap[i];
+                    cellMapRGB[i * 4] = id & 0xFF;
+                    cellMapRGB[i * 4 + 1] = (id >> 8) & 0xFF;
+                    cellMapRGB[i * 4 + 2] = 0;
+                    cellMapRGB[i * 4 + 3] = 255;
+                }
+                
+                this.textures.cellMap = this.createTexture(cellMapRGB, width, height, 'RGBA');
+                
+                // Create color map (256x256 texture with cell colors)
+                const colorMapSize = 256;
+                const colorMapData = new Uint8Array(colorMapSize * colorMapSize * 4);
+                
+                for (const cell of cells) {
+                    const id = cell.index;
+                    const x = id % colorMapSize;
+                    const y = Math.floor(id / colorMapSize);
+                    const idx = (y * colorMapSize + x) * 4;
+                    
+                    colorMapData[idx] = cell.color.r;
+                    colorMapData[idx + 1] = cell.color.g;
+                    colorMapData[idx + 2] = cell.color.b;
+                    colorMapData[idx + 3] = 255;
+                }
+                
+                this.textures.colorMap = this.createTexture(colorMapData, colorMapSize, colorMapSize, 'RGBA');
+                
+                // Upload distance field
+                this.textures.distanceField = this.createFloatTexture(distanceField, width, height);
+                
+                // Upload noise texture
+                this.textures.noise = this.createFloatTexture(noiseData, width, height);
+                
+                console.log('Textures uploaded');
+            }
+            
+            // Render with current parameters
+            render(params) {
+                if (!this.initialized) {
+                    this.initialize();
+                }
+                
+                const gl = this.gl;
+                gl.useProgram(this.program);
+                
+                // Bind textures
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, this.textures.cellMap);
+                gl.uniform1i(gl.getUniformLocation(this.program, 'u_cellMap'), 0);
+                
+                gl.activeTexture(gl.TEXTURE1);
+                gl.bindTexture(gl.TEXTURE_2D, this.textures.colorMap);
+                gl.uniform1i(gl.getUniformLocation(this.program, 'u_colorMap'), 1);
+                
+                gl.activeTexture(gl.TEXTURE2);
+                gl.bindTexture(gl.TEXTURE_2D, this.textures.distanceField);
+                gl.uniform1i(gl.getUniformLocation(this.program, 'u_distanceField'), 2);
+                
+                gl.activeTexture(gl.TEXTURE3);
+                gl.bindTexture(gl.TEXTURE_2D, this.textures.noise);
+                gl.uniform1i(gl.getUniformLocation(this.program, 'u_noiseTexture'), 3);
+                
+                // Set uniforms
+                gl.uniform2f(gl.getUniformLocation(this.program, 'u_resolution'), 
+                             this.canvas.width, this.canvas.height);
+                
+                // Border parameters
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_borderThickness'), params.borderThickness);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_borderIrregularity'), params.borderIrregularity);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_borderDepth'), params.borderDepth);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_borderSoftness'), params.borderSoftness);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_borderBrightness'), params.borderBrightness);
+                
+                // Glass material parameters
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_glassThickness'), params.glassThickness);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_distortionStrength'), params.distortionStrength);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_distortionScale'), params.distortionScale);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_bevelAmount'), params.bevelAmount);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_bevelWidth'), params.bevelWidth);
+                
+                // Lighting parameters
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_backlightStrength'), params.backlight);
+                
+                const angleRad = params.lightAngle * Math.PI / 180;
+                gl.uniform2f(gl.getUniformLocation(this.program, 'u_lightDirection'), 
+                             Math.cos(angleRad), Math.sin(angleRad));
+                
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_ambientLight'), params.ambientLight);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_bloomStrength'), params.bloomStrength);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_leadShadow'), params.leadShadow);
+                
+                // Color parameters
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_colorQuant'), params.colorQuant);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_saturation'), params.saturation);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_luminanceBias'), params.luminanceBias);
+                
+                // Aging parameters
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_dirtAmount'), params.dirtAmount);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_crackIntensity'), params.crackIntensity);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_cloudiness'), params.cloudiness);
+                gl.uniform1f(gl.getUniformLocation(this.program, 'u_leadAging'), params.leadAging);
+                
+                // Draw fullscreen quad
+                gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            }
+            
+            resize(width, height) {
+                this.canvas.width = width;
+                this.canvas.height = height;
+            }
+        }
+
+        // ============================================================================
+        // Module: EdgeDetector
+        // Detects structural edges in images using Sobel operator
+        // ============================================================================
+        class EdgeDetector {
+            constructor(width, height, imageData) {
+                this.width = width;
+                this.height = height;
+                this.imageData = imageData;
+            }
+            
+            // Apply Gaussian blur to reduce noise before edge detection
+            gaussianBlur(imageData, radius) {
+                if (radius < 0.5) return imageData;
+                
+                const width = this.width;
+                const height = this.height;
+                const src = imageData.data;
+                const dst = new Uint8ClampedArray(src.length);
+                
+                // Generate 1D Gaussian kernel
+                const kernelSize = Math.ceil(radius * 3) * 2 + 1;
+                const kernel = this.generateGaussianKernel(radius, kernelSize);
+                const halfSize = Math.floor(kernelSize / 2);
+                
+                // Horizontal pass
+                const temp = new Uint8ClampedArray(src.length);
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let r = 0, g = 0, b = 0;
+                        let weightSum = 0;
+                        
+                        for (let k = 0; k < kernelSize; k++) {
+                            const kx = x + k - halfSize;
+                            if (kx < 0 || kx >= width) continue;
+                            
+                            const idx = (y * width + kx) * 4;
+                            const weight = kernel[k];
+                            
+                            r += src[idx] * weight;
+                            g += src[idx + 1] * weight;
+                            b += src[idx + 2] * weight;
+                            weightSum += weight;
+                        }
+                        
+                        const idx = (y * width + x) * 4;
+                        temp[idx] = r / weightSum;
+                        temp[idx + 1] = g / weightSum;
+                        temp[idx + 2] = b / weightSum;
+                        temp[idx + 3] = 255;
+                    }
+                }
+                
+                // Vertical pass
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let r = 0, g = 0, b = 0;
+                        let weightSum = 0;
+                        
+                        for (let k = 0; k < kernelSize; k++) {
+                            const ky = y + k - halfSize;
+                            if (ky < 0 || ky >= height) continue;
+                            
+                            const idx = (ky * width + x) * 4;
+                            const weight = kernel[k];
+                            
+                            r += temp[idx] * weight;
+                            g += temp[idx + 1] * weight;
+                            b += temp[idx + 2] * weight;
+                            weightSum += weight;
+                        }
+                        
+                        const idx = (y * width + x) * 4;
+                        dst[idx] = r / weightSum;
+                        dst[idx + 1] = g / weightSum;
+                        dst[idx + 2] = b / weightSum;
+                        dst[idx + 3] = 255;
+                    }
+                }
+                
+                return new ImageData(dst, width, height);
+            }
+            
+            generateGaussianKernel(sigma, size) {
+                const kernel = new Float32Array(size);
+                const center = Math.floor(size / 2);
+                let sum = 0;
+                
+                for (let i = 0; i < size; i++) {
+                    const x = i - center;
+                    kernel[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
+                    sum += kernel[i];
+                }
+                
+                // Normalize
+                for (let i = 0; i < size; i++) {
+                    kernel[i] /= sum;
+                }
+                
+                return kernel;
+            }
+            
+            // Compute edge magnitude using Sobel operator
+            detectEdges(sensitivity, blurRadius) {
+                console.log(`Detecting edges (sensitivity: ${sensitivity}, blur: ${blurRadius})`);
+                
+                // Step 1: Blur if needed
+                let workingData = this.imageData;
+                if (blurRadius > 0) {
+                    workingData = this.gaussianBlur(this.imageData, blurRadius);
+                }
+                
+                const src = workingData.data;
+                const edgeMap = new Float32Array(this.width * this.height);
+                
+                // Sobel kernels
+                const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
+                const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
+                
+                // Step 2: Apply Sobel operator
+                for (let y = 1; y < this.height - 1; y++) {
+                    for (let x = 1; x < this.width - 1; x++) {
+                        let gx = 0, gy = 0;
+                        
+                        // Apply kernels in 3x3 neighborhood
+                        for (let ky = -1; ky <= 1; ky++) {
+                            for (let kx = -1; kx <= 1; kx++) {
+                                const px = x + kx;
+                                const py = y + ky;
+                                const idx = (py * this.width + px) * 4;
+                                
+                                // Use luminance as edge intensity
+                                const lum = 0.299 * src[idx] + 0.587 * src[idx + 1] + 0.114 * src[idx + 2];
+                                
+                                const kernelIdx = (ky + 1) * 3 + (kx + 1);
+                                gx += lum * sobelX[kernelIdx];
+                                gy += lum * sobelY[kernelIdx];
+                            }
+                        }
+                        
+                        // Edge magnitude
+                        const magnitude = Math.sqrt(gx * gx + gy * gy);
+                        edgeMap[y * this.width + x] = magnitude;
+                    }
+                }
+                
+                // Step 3: Normalize and threshold
+                let maxMag = 0;
+                for (let i = 0; i < edgeMap.length; i++) {
+                    if (edgeMap[i] > maxMag) maxMag = edgeMap[i];
+                }
+                
+                const threshold = sensitivity * maxMag;
+                const binaryEdges = new Uint8Array(this.width * this.height);
+                
+                for (let i = 0; i < edgeMap.length; i++) {
+                    binaryEdges[i] = edgeMap[i] > threshold ? 1 : 0;
+                }
+                
+                console.log(`Edge detection complete (max magnitude: ${maxMag.toFixed(1)})`);
+                
+                return binaryEdges;
+            }
+        }
+
+        // ============================================================================
+        // Module: RegionExtractor
+        // Extracts regions from edge map using flood fill
+        // ============================================================================
+        class RegionExtractor {
+            constructor(width, height, imageData) {
+                this.width = width;
+                this.height = height;
+                this.imageData = imageData;
+            }
+            
+            // Extract regions from edge map using flood fill
+            extractRegions(edgeMap, minArea) {
+                console.log(`Extracting regions (minArea: ${minArea})`);
+                
+                const regionMap = new Uint16Array(this.width * this.height);
+                const regions = [];
+                let regionId = 1;
+                
+                // Flood fill from each unassigned non-edge pixel
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        const idx = y * this.width + x;
+                        
+                        // Skip if edge or already assigned
+                        if (edgeMap[idx] === 1 || regionMap[idx] !== 0) continue;
+                        
+                        // Start new region
+                        const region = this.floodFill(x, y, regionId, edgeMap, regionMap);
+                        
+                        // Only keep regions above minimum area
+                        if (region.pixels.length >= minArea) {
+                            regions.push(region);
+                            regionId++;
+                        } else {
+                            // Mark as edge to prevent tiny regions
+                            for (const pixel of region.pixels) {
+                                regionMap[pixel.y * this.width + pixel.x] = 0;
+                            }
+                        }
+                    }
+                }
+                
+                // Assign tiny regions to nearest valid region
+                this.assignOrphans(regionMap, regions);
+                
+                // Extract color data for each region
+                this.extractRegionColors(regions);
+                
+                console.log(`Extracted ${regions.length} regions`);
+                
+                return { regions, regionMap };
+            }
+            
+            floodFill(startX, startY, regionId, edgeMap, regionMap) {
+                const region = {
+                    id: regionId,
+                    pixels: [],
+                    bounds: { minX: startX, minY: startY, maxX: startX, maxY: startY },
+                    color: { r: 0, g: 0, b: 0 },
+                    area: 0,
+                    colorVariance: 0
+                };
+                
+                const stack = [{ x: startX, y: startY }];
+                const visited = new Set();
+                visited.add(startY * this.width + startX);
+                
+                while (stack.length > 0) {
+                    const { x, y } = stack.pop();
+                    const idx = y * this.width + x;
+                    
+                    // Mark as part of this region
+                    regionMap[idx] = regionId;
+                    region.pixels.push({ x, y });
+                    
+                    // Update bounds
+                    region.bounds.minX = Math.min(region.bounds.minX, x);
+                    region.bounds.minY = Math.min(region.bounds.minY, y);
+                    region.bounds.maxX = Math.max(region.bounds.maxX, x);
+                    region.bounds.maxY = Math.max(region.bounds.maxY, y);
+                    
+                    // Check 4-connected neighbors
+                    const neighbors = [
+                        { x: x + 1, y },
+                        { x: x - 1, y },
+                        { x, y: y + 1 },
+                        { x, y: y - 1 }
+                    ];
+                    
+                    for (const n of neighbors) {
+                        if (n.x < 0 || n.x >= this.width || n.y < 0 || n.y >= this.height) continue;
+                        
+                        const nIdx = n.y * this.width + n.x;
+                        if (visited.has(nIdx)) continue;
+                        if (edgeMap[nIdx] === 1) continue;
+                        if (regionMap[nIdx] !== 0) continue;
+                        
+                        visited.add(nIdx);
+                        stack.push(n);
+                    }
+                }
+                
+                region.area = region.pixels.length;
+                return region;
+            }
+            
+            assignOrphans(regionMap, regions) {
+                // Find all unassigned pixels
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        const idx = y * this.width + x;
+                        if (regionMap[idx] !== 0) continue;
+                        
+                        // Find nearest region
+                        let minDist = Infinity;
+                        let nearestRegion = 1;
+                        
+                        for (const region of regions) {
+                            // Check distance to region bounds (quick approximation)
+                            const dx = Math.max(0, region.bounds.minX - x, x - region.bounds.maxX);
+                            const dy = Math.max(0, region.bounds.minY - y, y - region.bounds.maxY);
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            
+                            if (dist < minDist) {
+                                minDist = dist;
+                                nearestRegion = region.id;
+                            }
+                        }
+                        
+                        regionMap[idx] = nearestRegion;
+                        
+                        // Add to region pixels
+                        const region = regions.find(r => r.id === nearestRegion);
+                        if (region) {
+                            region.pixels.push({ x, y });
+                            region.area++;
+                        }
+                    }
+                }
+            }
+            
+            extractRegionColors(regions) {
+                const data = this.imageData.data;
+                
+                for (const region of regions) {
+                    let sumR = 0, sumG = 0, sumB = 0;
+                    
+                    // Compute average color
+                    for (const pixel of region.pixels) {
+                        const idx = (pixel.y * this.width + pixel.x) * 4;
+                        sumR += data[idx];
+                        sumG += data[idx + 1];
+                        sumB += data[idx + 2];
+                    }
+                    
+                    const count = region.pixels.length;
+                    region.color.r = Math.round(sumR / count);
+                    region.color.g = Math.round(sumG / count);
+                    region.color.b = Math.round(sumB / count);
+                    
+                    // Compute color variance
+                    let variance = 0;
+                    for (const pixel of region.pixels) {
+                        const idx = (pixel.y * this.width + pixel.x) * 4;
+                        const dr = data[idx] - region.color.r;
+                        const dg = data[idx + 1] - region.color.g;
+                        const db = data[idx + 2] - region.color.b;
+                        variance += dr * dr + dg * dg + db * db;
+                    }
+                    region.colorVariance = variance / count;
+                }
+            }
+        }
+
+        // ============================================================================
+        // Module: RegionSubdivider
+        // Subdivides large regions while preserving boundaries
+        // ============================================================================
+        class RegionSubdivider {
+            constructor(width, height) {
+                this.width = width;
+                this.height = height;
+            }
+            
+            // Subdivide regions exceeding max area
+            subdivideRegions(regions, regionMap, maxArea, density, randomness, seed) {
+                console.log(`Subdividing regions (maxArea: ${maxArea}, density: ${density})`);
+                
+                const random = new Random(seed);
+                const newRegions = [];
+                let nextId = regions.length + 1;
+                
+                for (const region of regions) {
+                    if (region.area <= maxArea) {
+                        // Keep as-is
+                        newRegions.push(region);
+                    } else {
+                        // Subdivide this region
+                        const subRegions = this.subdivideRegion(
+                            region, regionMap, density, randomness, random, nextId
+                        );
+                        
+                        newRegions.push(...subRegions);
+                        nextId += subRegions.length;
+                    }
+                }
+                
+                console.log(`Subdivision complete: ${regions.length} -> ${newRegions.length} regions`);
+                
+                return newRegions;
+            }
+            
+            subdivideRegion(region, regionMap, density, randomness, random, startId) {
+                // Calculate number of subdivisions based on area and density
+                const targetSubdivisions = Math.ceil(Math.sqrt(region.area / 1000) * density * 5);
+                const numSites = Math.max(2, targetSubdivisions);
+                
+                // Generate site points within region bounds
+                const sites = this.generateConstrainedSites(region, numSites, randomness, random);
+                
+                // Assign each pixel in region to nearest site
+                const subRegionMap = new Map();
+                
+                for (const pixel of region.pixels) {
+                    let nearestSite = 0;
+                    let minDist = Infinity;
+                    
+                    for (let i = 0; i < sites.length; i++) {
+                        const dx = pixel.x - sites[i].x;
+                        const dy = pixel.y - sites[i].y;
+                        const dist = dx * dx + dy * dy;
+                        
+                        if (dist < minDist) {
+                            minDist = dist;
+                            nearestSite = i;
+                        }
+                    }
+                    
+                    if (!subRegionMap.has(nearestSite)) {
+                        subRegionMap.set(nearestSite, []);
+                    }
+                    subRegionMap.get(nearestSite).push(pixel);
+                }
+                
+                // Build sub-regions
+                const subRegions = [];
+                let subId = startId;
+                
+                for (const [siteIdx, pixels] of subRegionMap.entries()) {
+                    const subRegion = {
+                        id: subId++,
+                        pixels,
+                        bounds: this.computeBounds(pixels),
+                        color: { r: 0, g: 0, b: 0 },
+                        area: pixels.length,
+                        colorVariance: 0,
+                        site: sites[siteIdx]
+                    };
+                    
+                    // Update region map
+                    for (const pixel of pixels) {
+                        regionMap[pixel.y * this.width + pixel.x] = subRegion.id;
+                    }
+                    
+                    subRegions.push(subRegion);
+                }
+                
+                return subRegions;
+            }
+            
+            generateConstrainedSites(region, count, randomness, random) {
+                const sites = [];
+                const bounds = region.bounds;
+                const width = bounds.maxX - bounds.minX + 1;
+                const height = bounds.maxY - bounds.minY + 1;
+                
+                // Grid-based placement with jitter
+                const cols = Math.ceil(Math.sqrt(count * width / height));
+                const rows = Math.ceil(count / cols);
+                const cellW = width / cols;
+                const cellH = height / rows;
+                
+                for (let row = 0; row < rows && sites.length < count; row++) {
+                    for (let col = 0; col < cols && sites.length < count; col++) {
+                        const baseX = bounds.minX + (col + 0.5) * cellW;
+                        const baseY = bounds.minY + (row + 0.5) * cellH;
+                        
+                        const jitter = randomness * 0.4;
+                        const offsetX = (random.next() - 0.5) * cellW * jitter;
+                        const offsetY = (random.next() - 0.5) * cellH * jitter;
+                        
+                        const x = Math.round(Math.max(bounds.minX, Math.min(bounds.maxX, baseX + offsetX)));
+                        const y = Math.round(Math.max(bounds.minY, Math.min(bounds.maxY, baseY + offsetY)));
+                        
+                        // Verify point is actually in region
+                        const pixelInRegion = region.pixels.some(p => p.x === x && p.y === y);
+                        if (pixelInRegion) {
+                            sites.push(new Vec2(x, y));
+                        } else {
+                            // Use center point if jittered location is outside
+                            const centerPixel = region.pixels[Math.floor(region.pixels.length / 2)];
+                            sites.push(new Vec2(centerPixel.x, centerPixel.y));
+                        }
+                    }
+                }
+                
+                return sites;
+            }
+            
+            computeBounds(pixels) {
+                const bounds = {
+                    minX: Infinity,
+                    minY: Infinity,
+                    maxX: -Infinity,
+                    maxY: -Infinity
+                };
+                
+                for (const pixel of pixels) {
+                    bounds.minX = Math.min(bounds.minX, pixel.x);
+                    bounds.minY = Math.min(bounds.minY, pixel.y);
+                    bounds.maxX = Math.max(bounds.maxX, pixel.x);
+                    bounds.maxY = Math.max(bounds.maxY, pixel.y);
+                }
+                
+                return bounds;
+            }
+        }
+
+        // ============================================================================
+        // Module: RegionSegmenter (replaces CellSegmenter)
+        // Orchestrates edge-aware region-based segmentation
+        // ============================================================================
+        class RegionSegmenter {
+            constructor(width, height, imageData) {
+                this.width = width;
+                this.height = height;
+                this.imageData = imageData;
+                
+                this.edgeDetector = new EdgeDetector(width, height, imageData);
+                this.regionExtractor = new RegionExtractor(width, height, imageData);
+                this.regionSubdivider = new RegionSubdivider(width, height);
+            }
+            
+            // Main segmentation pipeline
+            segment(params) {
+                console.log('Starting edge-aware segmentation:', params);
+                
+                // Step 1: Detect edges
+                const edgeMap = this.edgeDetector.detectEdges(
+                    params.edgeSensitivity,
+                    params.edgeBlur
+                );
+                
+                // Step 2: Extract base regions from edge map
+                const { regions: baseRegions, regionMap } = this.regionExtractor.extractRegions(
+                    edgeMap,
+                    params.minRegionArea
+                );
+                
+                // Step 3: Subdivide large regions
+                const finalRegions = this.regionSubdivider.subdivideRegions(
+                    baseRegions,
+                    regionMap,
+                    params.maxRegionArea,
+                    params.subdivDensity,
+                    params.subdivRandom,
+                    params.seed
+                );
+                
+                // Step 4: Re-extract colors after subdivision
+                this.regionExtractor.extractRegionColors(finalRegions);
+                
+                // Convert to cell format for compatibility with existing rendering
+                const cells = this.convertRegionsToCells(finalRegions);
+                
+                console.log(`Segmentation complete: ${cells.length} glass pieces`);
+                
+                return { cells, cellMap: regionMap };
+            }
+            
+            // Convert region format to cell format for rendering compatibility
+            convertRegionsToCells(regions) {
+                return regions.map(region => ({
+                    site: region.site || new Vec2(
+                        (region.bounds.minX + region.bounds.maxX) / 2,
+                        (region.bounds.minY + region.bounds.maxY) / 2
+                    ),
+                    index: region.id - 1,
+                    pixels: region.pixels,
+                    color: region.color,
+                    bounds: region.bounds,
+                    area: region.area,
+                    colorVariance: region.colorVariance
+                }));
+            }
+        }
+
+        // ============================================================================
+        // Module: DistanceField
+        // Computes distance fields for smooth borders and effects
+        // ============================================================================
+        class DistanceField {
+            constructor(width, height) {
+                this.width = width;
+                this.height = height;
+            }
+            
+            // Compute distance to nearest cell boundary for each pixel
+            // Returns normalized distance (0 at border, 1 at cell center)
+            computeBorderDistanceField(cellMap) {
+                const distances = new Float32Array(this.width * this.height);
+                
+                // First pass: mark border pixels
+                const isBorder = new Uint8Array(this.width * this.height);
+                
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        const idx = y * this.width + x;
+                        const cellIdx = cellMap[idx];
+                        
+                        // Check 4-connected neighbors
+                        let hasDifferentNeighbor = false;
+                        
+                        if (x > 0 && cellMap[idx - 1] !== cellIdx) hasDifferentNeighbor = true;
+                        if (x < this.width - 1 && cellMap[idx + 1] !== cellIdx) hasDifferentNeighbor = true;
+                        if (y > 0 && cellMap[idx - this.width] !== cellIdx) hasDifferentNeighbor = true;
+                        if (y < this.height - 1 && cellMap[idx + this.width] !== cellIdx) hasDifferentNeighbor = true;
+                        
+                        isBorder[idx] = hasDifferentNeighbor ? 1 : 0;
+                        distances[idx] = hasDifferentNeighbor ? 0 : Infinity;
+                    }
+                }
+                
+                // Distance transform using jump flooding algorithm (approximate but fast)
+                this.jumpFloodingDistance(distances, isBorder);
+                
+                // Normalize distances
+                this.normalizeDistances(distances);
+                
+                return distances;
+            }
+            
+            // Jump flooding algorithm for fast distance field computation
+            jumpFloodingDistance(distances, isBorder) {
+                const closest = new Int32Array(this.width * this.height);
+                
+                // Initialize with border positions
+                for (let i = 0; i < distances.length; i++) {
+                    closest[i] = isBorder[i] ? i : -1;
+                }
+                
+                // Jump flooding passes
+                const maxDim = Math.max(this.width, this.height);
+                let step = Math.pow(2, Math.ceil(Math.log2(maxDim)) - 1);
+                
+                while (step >= 1) {
+                    this.jumpFloodingPass(closest, distances, step);
+                    step = Math.floor(step / 2);
+                }
+                
+                // Final pass with step 1
+                this.jumpFloodingPass(closest, distances, 1);
+            }
+            
+            jumpFloodingPass(closest, distances, step) {
+                const newClosest = new Int32Array(closest);
+                
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        const idx = y * this.width + x;
+                        
+                        // Check neighbors at step distance
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                const nx = x + dx * step;
+                                const ny = y + dy * step;
+                                
+                                if (nx < 0 || nx >= this.width || ny < 0 || ny >= this.height) continue;
+                                
+                                const nIdx = ny * this.width + nx;
+                                const seedIdx = closest[nIdx];
+                                
+                                if (seedIdx === -1) continue;
+                                
+                                // Compute distance to this seed
+                                const seedX = seedIdx % this.width;
+                                const seedY = Math.floor(seedIdx / this.width);
+                                const dist = Math.sqrt((x - seedX) ** 2 + (y - seedY) ** 2);
+                                
+                                if (dist < distances[idx]) {
+                                    distances[idx] = dist;
+                                    newClosest[idx] = seedIdx;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                closest.set(newClosest);
+            }
+            
+            normalizeDistances(distances) {
+                // Find max distance for normalization
+                let maxDist = 0;
+                for (let i = 0; i < distances.length; i++) {
+                    if (distances[i] !== Infinity && distances[i] > maxDist) {
+                        maxDist = distances[i];
+                    }
+                }
+                
+                // Normalize to 0-1 range
+                if (maxDist > 0) {
+                    for (let i = 0; i < distances.length; i++) {
+                        if (distances[i] === Infinity) {
+                            distances[i] = 1.0;
+                        } else {
+                            distances[i] = Math.min(1.0, distances[i] / maxDist);
+                        }
+                    }
+                }
+            }
+        }
+
+        // ============================================================================
+        // Module: NoiseGenerator
+        // Generates Perlin/Simplex-style noise for organic variation
+        // ============================================================================
+        class NoiseGenerator {
+            constructor(seed = 0) {
+                this.seed = seed;
+                this.perm = this.generatePermutation();
+            }
+            
+            generatePermutation() {
+                const p = [];
+                for (let i = 0; i < 256; i++) p[i] = i;
+                
+                // Fisher-Yates shuffle with seed
+                const random = new Random(this.seed);
+                for (let i = 255; i > 0; i--) {
+                    const j = random.int(0, i);
+                    [p[i], p[j]] = [p[j], p[i]];
+                }
+                
+                // Duplicate for wrapping
+                return [...p, ...p];
+            }
+            
+            // 2D Perlin-style noise
+            noise2D(x, y) {
+                // Scale input
+                x *= 0.1;
+                y *= 0.1;
+                
+                // Integer coordinates
+                const xi = Math.floor(x) & 255;
+                const yi = Math.floor(y) & 255;
+                
+                // Fractional coordinates
+                const xf = x - Math.floor(x);
+                const yf = y - Math.floor(y);
+                
+                // Fade curves
+                const u = this.fade(xf);
+                const v = this.fade(yf);
+                
+                // Hash coordinates
+                const aa = this.perm[this.perm[xi] + yi];
+                const ab = this.perm[this.perm[xi] + yi + 1];
+                const ba = this.perm[this.perm[xi + 1] + yi];
+                const bb = this.perm[this.perm[xi + 1] + yi + 1];
+                
+                // Gradients
+                const g1 = this.grad2D(aa, xf, yf);
+                const g2 = this.grad2D(ba, xf - 1, yf);
+                const g3 = this.grad2D(ab, xf, yf - 1);
+                const g4 = this.grad2D(bb, xf - 1, yf - 1);
+                
+                // Bilinear interpolation
+                const x1 = this.lerp(g1, g2, u);
+                const x2 = this.lerp(g3, g4, u);
+                
+                return this.lerp(x1, x2, v);
+            }
+            
+            grad2D(hash, x, y) {
+                const h = hash & 3;
+                const u = h < 2 ? x : y;
+                const v = h < 2 ? y : x;
+                return ((h & 1) ? -u : u) + ((h & 2) ? -2.0 * v : 2.0 * v);
+            }
+            
+            fade(t) {
+                return t * t * t * (t * (t * 6 - 15) + 10);
+            }
+            
+            lerp(a, b, t) {
+                return a + t * (b - a);
+            }
+            
+            // Octave noise for more detail
+            octaveNoise2D(x, y, octaves = 4, persistence = 0.5) {
+                let total = 0;
+                let frequency = 1;
+                let amplitude = 1;
+                let maxValue = 0;
+                
+                for (let i = 0; i < octaves; i++) {
+                    total += this.noise2D(x * frequency, y * frequency) * amplitude;
+                    maxValue += amplitude;
+                    amplitude *= persistence;
+                    frequency *= 2;
+                }
+                
+                return total / maxValue;
+            }
+        }
+
+        // ============================================================================
+        // Module: BorderRenderer
+        // Advanced border rendering with distance fields and organic variation
+        // ============================================================================
+        class BorderRenderer {
+            constructor(width, height) {
+                this.width = width;
+                this.height = height;
+                this.distanceField = new DistanceField(width, height);
+                this.noiseGen = null;
+            }
+            
+            setRandomSeed(seed) {
+                this.noiseGen = new NoiseGenerator(seed);
+            }
+            
+            // Compute border data that can be reused for rendering
+            computeBorderData(cellMap, params) {
+                const borderData = {
+                    distanceField: this.distanceField.computeBorderDistanceField(cellMap),
+                    params: { ...params }
+                };
+                
+                return borderData;
+            }
+            
+            // Render borders onto image data
+            renderBorders(imageData, cells, cellMap, borderData, params) {
+                const data = imageData.data;
+                const distances = borderData.distanceField;
+                
+                const thickness = params.borderThickness;
+                const irregularity = params.borderIrregularity;
+                const depth = params.borderDepth;
+                const softness = params.borderSoftness;
+                const brightness = params.borderBrightness;
+                
+                // Process each pixel
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        const idx = y * this.width + x;
+                        const pixelIdx = idx * 4;
+                        
+                        // Get base distance
+                        let dist = distances[idx];
+                        
+                        // Add noise-based irregularity
+                        if (irregularity > 0 && this.noiseGen) {
+                            const noise = this.noiseGen.octaveNoise2D(x, y, 3, 0.5);
+                            dist += noise * irregularity * 0.3;
+                        }
+                        
+                        // Compute border intensity based on distance
+                        const borderThreshold = thickness / 100.0; // Normalize thickness
+                        let borderAlpha = 0;
+                        
+                        if (dist < borderThreshold) {
+                            // Inside border region
+                            const t = dist / borderThreshold;
+                            
+                            // Apply softness to edge falloff
+                            const softT = softness > 0 ? 
+                                Math.pow(t, 1 + softness * 3) : t;
+                            
+                            borderAlpha = 1 - softT;
+                        }
+                        
+                        if (borderAlpha > 0.01) {
+                            // Get cell color
+                            const cellIdx = cellMap[idx];
+                            const cell = cells[cellIdx];
+                            
+                            // Compute border color with depth/shadow
+                            const shadowAmount = depth * (1 - dist / borderThreshold);
+                            
+                            // Base lead color (dark gray/black)
+                            const baseR = brightness * 255;
+                            const baseG = brightness * 255;
+                            const baseB = brightness * 255;
+                            
+                            // Add slight color tint from glass
+                            const tintAmount = 0.1;
+                            const leadR = baseR + cell.color.r * tintAmount;
+                            const leadG = baseG + cell.color.g * tintAmount;
+                            const leadB = baseB + cell.color.b * tintAmount;
+                            
+                            // Apply shadow (darken further based on depth)
+                            const shadowFactor = 1 - shadowAmount * 0.5;
+                            const finalR = leadR * shadowFactor;
+                            const finalG = leadG * shadowFactor;
+                            const finalB = leadB * shadowFactor;
+                            
+                            // Blend with existing color
+                            data[pixelIdx] = data[pixelIdx] * (1 - borderAlpha) + finalR * borderAlpha;
+                            data[pixelIdx + 1] = data[pixelIdx + 1] * (1 - borderAlpha) + finalG * borderAlpha;
+                            data[pixelIdx + 2] = data[pixelIdx + 2] * (1 - borderAlpha) + finalB * borderAlpha;
+                        }
+                    }
+                }
+            }
+        }
+        // Module: StainedGlassRenderer
+        // Renders the stained glass effect to canvas
+        // ============================================================================
+        class StainedGlassRenderer {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+            }
+            
+            // Render basic flat stained glass (Phase 2 - simple version)
+            renderBasic(width, height, cells, cellMap) {
+                this.canvas.width = width;
+                this.canvas.height = height;
+                
+                const imageData = this.ctx.createImageData(width, height);
+                const data = imageData.data;
+                
+                // Fill each pixel with its cell color
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const mapIdx = y * width + x;
+                        const cellIdx = cellMap[mapIdx];
+                        const cell = cells[cellIdx];
+                        const pixelIdx = mapIdx * 4;
+                        
+                        data[pixelIdx] = cell.color.r;
+                        data[pixelIdx + 1] = cell.color.g;
+                        data[pixelIdx + 2] = cell.color.b;
+                        data[pixelIdx + 3] = 255;
+                    }
+                }
+                
+                this.ctx.putImageData(imageData, 0, 0);
+                
+                // Draw cell borders (lead lines) - simple version
+                this.drawBorders(cells, cellMap, width, height);
+            }
+            
+            drawBorders(cells, cellMap, width, height) {
+                this.ctx.strokeStyle = '#1a1a1a';
+                this.ctx.lineWidth = 2;
+                
+                // Find border pixels using edge detection
+                for (let y = 1; y < height - 1; y++) {
+                    for (let x = 1; x < width - 1; x++) {
+                        const idx = y * width + x;
+                        const cellIdx = cellMap[idx];
+                        
+                        // Check neighbors
+                        const rightIdx = cellMap[y * width + (x + 1)];
+                        const bottomIdx = cellMap[(y + 1) * width + x];
+                        
+                        if (cellIdx !== rightIdx || cellIdx !== bottomIdx) {
+                            this.ctx.fillStyle = '#1a1a1a';
+                            this.ctx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                }
+            }
+        }
+        // Module: Utilities
+        // Helper functions for math and random number generation
+        // ============================================================================
+        class Random {
+            constructor(seed = Date.now()) {
+                this.seed = seed;
+            }
+            
+            // Linear congruential generator
+            next() {
+                this.seed = (this.seed * 1664525 + 1013904223) % 4294967296;
+                return this.seed / 4294967296;
+            }
+            
+            range(min, max) {
+                return min + this.next() * (max - min);
+            }
+            
+            int(min, max) {
+                return Math.floor(this.range(min, max + 1));
+            }
+        }
+        
+        class Vec2 {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+            
+            distanceTo(other) {
+                const dx = this.x - other.x;
+                const dy = this.y - other.y;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+            
+            add(other) {
+                return new Vec2(this.x + other.x, this.y + other.y);
+            }
+            
+            scale(s) {
+                return new Vec2(this.x * s, this.y * s);
+            }
+        }
+
+        // ============================================================================
+        // Module: VoronoiGenerator
+        // Generates Voronoi diagrams for glass cell segmentation
+        // ============================================================================
+        class VoronoiGenerator {
+            constructor(width, height) {
+                this.width = width;
+                this.height = height;
+                this.sites = [];
+            }
+            
+            // Generate site points using various distribution strategies
+            generateSites(count, uniformity, minDistance, seed) {
+                const random = new Random(seed);
+                this.sites = [];
+                
+                // Mix of uniform grid and random placement based on uniformity
+                // uniformity 0 = pure random, 1 = pure grid
+                
+                if (uniformity > 0.8) {
+                    // Mostly grid-based with slight jitter
+                    this.generateGridSites(count, uniformity, random);
+                } else if (uniformity < 0.2) {
+                    // Mostly random with Lloyd relaxation
+                    this.generateRandomSites(count, minDistance, random);
+                } else {
+                    // Hybrid approach
+                    this.generateHybridSites(count, uniformity, minDistance, random);
+                }
+                
+                return this.sites;
+            }
+            
+            generateGridSites(count, uniformity, random) {
+                const cols = Math.ceil(Math.sqrt(count * this.width / this.height));
+                const rows = Math.ceil(count / cols);
+                const cellW = this.width / cols;
+                const cellH = this.height / rows;
+                
+                const jitter = (1 - uniformity) * 0.4; // Max 40% jitter
+                
+                for (let row = 0; row < rows; row++) {
+                    for (let col = 0; col < cols; col++) {
+                        if (this.sites.length >= count) break;
+                        
+                        const baseX = (col + 0.5) * cellW;
+                        const baseY = (row + 0.5) * cellH;
+                        
+                        const offsetX = (random.next() - 0.5) * cellW * jitter;
+                        const offsetY = (random.next() - 0.5) * cellH * jitter;
+                        
+                        this.sites.push(new Vec2(
+                            Math.max(0, Math.min(this.width, baseX + offsetX)),
+                            Math.max(0, Math.min(this.height, baseY + offsetY))
+                        ));
+                    }
+                }
+            }
+            
+            generateRandomSites(count, minDistance, random) {
+                const maxAttempts = count * 50;
+                let attempts = 0;
+                
+                while (this.sites.length < count && attempts < maxAttempts) {
+                    const candidate = new Vec2(
+                        random.range(0, this.width),
+                        random.range(0, this.height)
+                    );
+                    
+                    // Check minimum distance
+                    let valid = true;
+                    for (const site of this.sites) {
+                        if (site.distanceTo(candidate) < minDistance) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    
+                    if (valid) {
+                        this.sites.push(candidate);
+                    }
+                    attempts++;
+                }
+                
+                // Fill remaining with any valid position if we hit max attempts
+                while (this.sites.length < count) {
+                    this.sites.push(new Vec2(
+                        random.range(0, this.width),
+                        random.range(0, this.height)
+                    ));
+                }
+                
+                // Apply Lloyd relaxation for better distribution
+                this.lloydRelaxation(2);
+            }
+            
+            generateHybridSites(count, uniformity, minDistance, random) {
+                // Start with grid
+                const gridCount = Math.floor(count * uniformity);
+                const randomCount = count - gridCount;
+                
+                this.generateGridSites(gridCount, 0.9, random);
+                
+                // Add random sites
+                const maxAttempts = randomCount * 30;
+                let attempts = 0;
+                
+                while (this.sites.length < count && attempts < maxAttempts) {
+                    const candidate = new Vec2(
+                        random.range(0, this.width),
+                        random.range(0, this.height)
+                    );
+                    
+                    let valid = true;
+                    const checkDist = minDistance * (1 - uniformity * 0.5);
+                    
+                    for (const site of this.sites) {
+                        if (site.distanceTo(candidate) < checkDist) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    
+                    if (valid) {
+                        this.sites.push(candidate);
+                    }
+                    attempts++;
+                }
+                
+                while (this.sites.length < count) {
+                    this.sites.push(new Vec2(
+                        random.range(0, this.width),
+                        random.range(0, this.height)
+                    ));
+                }
+            }
+            
+            // Lloyd relaxation: move sites to centroids of their Voronoi cells
+            lloydRelaxation(iterations) {
+                for (let iter = 0; iter < iterations; iter++) {
+                    const cells = this.computeVoronoiCells();
+                    
+                    for (let i = 0; i < this.sites.length; i++) {
+                        if (cells[i] && cells[i].length > 0) {
+                            const centroid = this.computeCentroid(cells[i]);
+                            this.sites[i] = centroid;
+                        }
+                    }
+                }
+            }
+            
+            // Compute Voronoi cells using pixel-based approach
+            computeVoronoiCells() {
+                const cells = Array(this.sites.length).fill(null).map(() => []);
+                
+                // Sample points on a grid
+                const step = 5; // Sample every 5 pixels for efficiency
+                
+                for (let y = 0; y < this.height; y += step) {
+                    for (let x = 0; x < this.width; x += step) {
+                        const point = new Vec2(x, y);
+                        let nearest = 0;
+                        let minDist = Infinity;
+                        
+                        for (let i = 0; i < this.sites.length; i++) {
+                            const dist = point.distanceTo(this.sites[i]);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                nearest = i;
+                            }
+                        }
+                        
+                        cells[nearest].push(point);
+                    }
+                }
+                
+                return cells;
+            }
+            
+            computeCentroid(points) {
+                let sumX = 0;
+                let sumY = 0;
+                
+                for (const p of points) {
+                    sumX += p.x;
+                    sumY += p.y;
+                }
+                
+                return new Vec2(
+                    Math.max(0, Math.min(this.width, sumX / points.length)),
+                    Math.max(0, Math.min(this.height, sumY / points.length))
+                );
+            }
+            
+            getSites() {
+                return this.sites;
+            }
+        }
+
+        // ============================================================================
+        // Module: CellSegmenter
+        // Creates cell regions and extracts colors from source image
+        // ============================================================================
+        class CellSegmenter {
+            constructor(width, height, imageData) {
+                this.width = width;
+                this.height = height;
+                this.imageData = imageData;
+                this.cellMap = null; // Pixel to cell index mapping
+                this.cells = null; // Cell data including colors
+            }
+            
+            // Compute which cell each pixel belongs to
+            computeCellMap(sites) {
+                this.cellMap = new Uint16Array(this.width * this.height);
+                
+                // For each pixel, find nearest site
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        let nearest = 0;
+                        let minDist = Infinity;
+                        
+                        for (let i = 0; i < sites.length; i++) {
+                            const dx = x - sites[i].x;
+                            const dy = y - sites[i].y;
+                            const dist = dx * dx + dy * dy; // Squared distance is fine for comparison
+                            
+                            if (dist < minDist) {
+                                minDist = dist;
+                                nearest = i;
+                            }
+                        }
+                        
+                        this.cellMap[y * this.width + x] = nearest;
+                    }
+                }
+                
+                return this.cellMap;
+            }
+            
+            // Extract average color and bounds for each cell
+            extractCellData(sites) {
+                this.cells = sites.map((site, index) => ({
+                    site,
+                    index,
+                    pixels: [],
+                    color: { r: 0, g: 0, b: 0 },
+                    bounds: { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+                }));
+                
+                const data = this.imageData.data;
+                
+                // Accumulate pixel colors for each cell
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        const mapIdx = y * this.width + x;
+                        const cellIdx = this.cellMap[mapIdx];
+                        const pixelIdx = mapIdx * 4;
+                        
+                        const cell = this.cells[cellIdx];
+                        
+                        cell.color.r += data[pixelIdx];
+                        cell.color.g += data[pixelIdx + 1];
+                        cell.color.b += data[pixelIdx + 2];
+                        cell.pixels.push({ x, y });
+                        
+                        // Update bounds
+                        cell.bounds.minX = Math.min(cell.bounds.minX, x);
+                        cell.bounds.minY = Math.min(cell.bounds.minY, y);
+                        cell.bounds.maxX = Math.max(cell.bounds.maxX, x);
+                        cell.bounds.maxY = Math.max(cell.bounds.maxY, y);
+                    }
+                }
+                
+                // Compute average colors
+                for (const cell of this.cells) {
+                    const count = cell.pixels.length;
+                    if (count > 0) {
+                        cell.color.r = Math.round(cell.color.r / count);
+                        cell.color.g = Math.round(cell.color.g / count);
+                        cell.color.b = Math.round(cell.color.b / count);
+                    }
+                }
+                
+                return this.cells;
+            }
+            
+            getCellMap() {
+                return this.cellMap;
+            }
+            
+            getCells() {
+                return this.cells;
+            }
+        }
+
+        // ============================================================================
+        // Module: ImageLoader
+        // Handles image upload, validation, and preprocessing
+        // ============================================================================
+        class ImageLoader {
+            constructor() {
+                this.currentImage = null;
+                this.maxDimension = 1024; // Limit for performance
+            }
+            
+            async loadFromFile(file) {
+                if (!file.type.startsWith('image/')) {
+                    throw new Error('Invalid file type. Please upload an image.');
+                }
+                
+                const img = await this.createImageFromFile(file);
+                this.currentImage = await this.preprocessImage(img);
+                return this.currentImage;
+            }
+            
+            createImageFromFile(file) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    const url = URL.createObjectURL(file);
+                    
+                    img.onload = () => {
+                        URL.revokeObjectURL(url);
+                        resolve(img);
+                    };
+                    
+                    img.onerror = () => {
+                        URL.revokeObjectURL(url);
+                        reject(new Error('Failed to load image'));
+                    };
+                    
+                    img.src = url;
+                });
+            }
+            
+            async preprocessImage(img) {
+                // Resize if needed while maintaining aspect ratio
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > this.maxDimension || height > this.maxDimension) {
+                    const scale = this.maxDimension / Math.max(width, height);
+                    width = Math.floor(width * scale);
+                    height = Math.floor(height * scale);
+                }
+                
+                // Create canvas and draw resized image
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Get image data for processing
+                const imageData = ctx.getImageData(0, 0, width, height);
+                
+                return {
+                    canvas,
+                    imageData,
+                    width,
+                    height,
+                    originalWidth: img.width,
+                    originalHeight: img.height
+                };
+            }
+            
+            getCurrentImage() {
+                return this.currentImage;
+            }
+        }
+
+        // ============================================================================
+        // Module: CanvasRenderer
+        // Handles WebGL/Canvas rendering operations
+        // ============================================================================
+        class CanvasRenderer {
+            constructor(canvasElement) {
+                this.canvas = canvasElement;
+                this.ctx = canvasElement.getContext('2d', { alpha: false });
+                this.currentImageData = null;
+            }
+            
+            resize(width, height) {
+                this.canvas.width = width;
+                this.canvas.height = height;
+            }
+            
+            clear() {
+                this.ctx.fillStyle = '#0a0a0a';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+            
+            drawImageData(imageData) {
+                this.currentImageData = imageData;
+                this.resize(imageData.width, imageData.height);
+                this.ctx.putImageData(imageData, 0, 0);
+            }
+            
+            drawProcessedImage(processedImage) {
+                this.resize(processedImage.width, processedImage.height);
+                this.ctx.drawImage(processedImage.canvas, 0, 0);
+            }
+            
+            getCanvas() {
+                return this.canvas;
+            }
+        }
+
+        // ============================================================================
+        // Module: UIController
+        // Manages UI interactions and state
+        // ============================================================================
+        class UIController {
+            constructor() {
+                this.uploadArea = document.getElementById('uploadArea');
+                this.fileInput = document.getElementById('fileInput');
+                this.uploadStatus = document.getElementById('uploadStatus');
+                this.imageInfo = document.getElementById('imageInfo');
+                this.glassSection = document.getElementById('glassSection');
+                this.borderSection = document.getElementById('borderSection');
+                this.processStatus = document.getElementById('processStatus');
+                this.presetSelect = document.getElementById('presetSelect');
+                this.seedInput = document.getElementById('seedInput');
+                this.randomSeedBtn = document.getElementById('randomSeedBtn');
+                this.exportBtn = document.getElementById('exportBtn');
+                this.resetAllBtn = document.getElementById('resetAllBtn');
+                
+                // Slider elements
+                this.sliders = {
+                    edgeSensitivity: document.getElementById('edgeSensitivity'),
+                    edgeBlur: document.getElementById('edgeBlur'),
+                    minRegionArea: document.getElementById('minRegionArea'),
+                    maxRegionArea: document.getElementById('maxRegionArea'),
+                    subdivDensity: document.getElementById('subdivDensity'),
+                    subdivRandom: document.getElementById('subdivRandom'),
+                    borderThickness: document.getElementById('borderThickness'),
+                    borderIrregularity: document.getElementById('borderIrregularity'),
+                    borderDepth: document.getElementById('borderDepth'),
+                    borderSoftness: document.getElementById('borderSoftness'),
+                    borderBrightness: document.getElementById('borderBrightness'),
+                    glassThickness: document.getElementById('glassThickness'),
+                    distortionStrength: document.getElementById('distortionStrength'),
+                    distortionScale: document.getElementById('distortionScale'),
+                    bevelAmount: document.getElementById('bevelAmount'),
+                    bevelWidth: document.getElementById('bevelWidth'),
+                    backlight: document.getElementById('backlight'),
+                    lightAngle: document.getElementById('lightAngle'),
+                    ambientLight: document.getElementById('ambientLight'),
+                    bloomStrength: document.getElementById('bloomStrength'),
+                    leadShadow: document.getElementById('leadShadow'),
+                    colorQuant: document.getElementById('colorQuant'),
+                    saturation: document.getElementById('saturation'),
+                    luminanceBias: document.getElementById('luminanceBias'),
+                    dirtAmount: document.getElementById('dirtAmount'),
+                    crackIntensity: document.getElementById('crackIntensity'),
+                    cloudiness: document.getElementById('cloudiness'),
+                    leadAging: document.getElementById('leadAging')
+                };
+                
+                this.sliderValues = {
+                    edgeSensitivity: document.getElementById('edgeSensitivityValue'),
+                    edgeBlur: document.getElementById('edgeBlurValue'),
+                    minRegionArea: document.getElementById('minRegionAreaValue'),
+                    maxRegionArea: document.getElementById('maxRegionAreaValue'),
+                    subdivDensity: document.getElementById('subdivDensityValue'),
+                    subdivRandom: document.getElementById('subdivRandomValue'),
+                    borderThickness: document.getElementById('borderThicknessValue'),
+                    borderIrregularity: document.getElementById('borderIrregularityValue'),
+                    borderDepth: document.getElementById('borderDepthValue'),
+                    borderSoftness: document.getElementById('borderSoftnessValue'),
+                    borderBrightness: document.getElementById('borderBrightnessValue'),
+                    glassThickness: document.getElementById('glassThicknessValue'),
+                    distortionStrength: document.getElementById('distortionStrengthValue'),
+                    distortionScale: document.getElementById('distortionScaleValue'),
+                    bevelAmount: document.getElementById('bevelAmountValue'),
+                    bevelWidth: document.getElementById('bevelWidthValue'),
+                    backlight: document.getElementById('backlightValue'),
+                    lightAngle: document.getElementById('lightAngleValue'),
+                    ambientLight: document.getElementById('ambientLightValue'),
+                    bloomStrength: document.getElementById('bloomStrengthValue'),
+                    leadShadow: document.getElementById('leadShadowValue'),
+                    colorQuant: document.getElementById('colorQuantValue'),
+                    saturation: document.getElementById('saturationValue'),
+                    luminanceBias: document.getElementById('luminanceBiasValue'),
+                    dirtAmount: document.getElementById('dirtAmountValue'),
+                    crackIntensity: document.getElementById('crackIntensityValue'),
+                    cloudiness: document.getElementById('cloudinessValue'),
+                    leadAging: document.getElementById('leadAgingValue')
+                };
+                
+                this.regenerateBtn = document.getElementById('regenerateBtn');
+                this.updateBordersBtn = document.getElementById('updateBordersBtn');
+                this.updateMaterialBtn = document.getElementById('updateMaterialBtn');
+                this.updateLightingBtn = document.getElementById('updateLightingBtn');
+                this.updateColorBtn = document.getElementById('updateColorBtn');
+                this.updateAgingBtn = document.getElementById('updateAgingBtn');
+                
+                this.onImageUpload = null;
+                this.onRegenerate = null;
+                this.onUpdateBorders = null;
+                this.onUpdateMaterial = null;
+                this.onUpdateLighting = null;
+                this.onUpdateColor = null;
+                this.onUpdateAging = null;
+                this.onPresetChange = null;
+                this.onSeedChange = null;
+                this.onExport = null;
+                this.onResetAll = null;
+                
+                this.initializeEventListeners();
+            }
+            
+            initializeEventListeners() {
+                // File input change
+                this.fileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        this.handleFile(e.target.files[0]);
+                    }
+                });
+                
+                // Drag and drop
+                this.uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    this.uploadArea.classList.add('dragging');
+                });
+                
+                this.uploadArea.addEventListener('dragleave', () => {
+                    this.uploadArea.classList.remove('dragging');
+                });
+                
+                this.uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    this.uploadArea.classList.remove('dragging');
+                    
+                    if (e.dataTransfer.files.length > 0) {
+                        this.handleFile(e.dataTransfer.files[0]);
+                    }
+                });
+                
+                // Slider updates
+                Object.entries(this.sliders).forEach(([key, slider]) => {
+                    slider.addEventListener('input', (e) => {
+                        this.updateSliderValue(key, e.target.value);
+                    });
+                });
+                
+                // Regenerate button
+                this.regenerateBtn.addEventListener('click', () => {
+                    if (this.onRegenerate) {
+                        this.onRegenerate();
+                    }
+                });
+                
+                // Update borders button
+                this.updateBordersBtn.addEventListener('click', () => {
+                    if (this.onUpdateBorders) {
+                        this.onUpdateBorders();
+                    }
+                });
+                
+                // Update material button
+                this.updateMaterialBtn.addEventListener('click', () => {
+                    if (this.onUpdateMaterial) {
+                        this.onUpdateMaterial();
+                    }
+                });
+                
+                // Update lighting button
+                this.updateLightingBtn.addEventListener('click', () => {
+                    if (this.onUpdateLighting) {
+                        this.onUpdateLighting();
+                    }
+                });
+                
+                // Update color button
+                this.updateColorBtn.addEventListener('click', () => {
+                    if (this.onUpdateColor) {
+                        this.onUpdateColor();
+                    }
+                });
+                
+                // Update aging button
+                this.updateAgingBtn.addEventListener('click', () => {
+                    if (this.onUpdateAging) {
+                        this.onUpdateAging();
+                    }
+                });
+                
+                // Preset selection
+                this.presetSelect.addEventListener('change', (e) => {
+                    if (e.target.value && this.onPresetChange) {
+                        this.onPresetChange(e.target.value);
+                    }
+                });
+                
+                // Random seed button
+                this.randomSeedBtn.addEventListener('click', () => {
+                    const newSeed = Math.floor(Math.random() * 1000000);
+                    this.seedInput.value = newSeed;
+                    if (this.onSeedChange) {
+                        this.onSeedChange(newSeed);
+                    }
+                });
+                
+                // Seed input change
+                this.seedInput.addEventListener('change', (e) => {
+                    if (this.onSeedChange) {
+                        this.onSeedChange(parseInt(e.target.value) || 0);
+                    }
+                });
+                
+                // Export button
+                this.exportBtn.addEventListener('click', () => {
+                    if (this.onExport) {
+                        this.onExport();
+                    }
+                });
+                
+                // Reset all button
+                this.resetAllBtn.addEventListener('click', () => {
+                    if (this.onResetAll) {
+                        if (confirm('Reset all settings to defaults?')) {
+                            this.onResetAll();
+                        }
+                    }
+                });
+            }
+            
+            updateSliderValue(key, value) {
+                let display = value;
+                if (key === 'edgeSensitivity' || key === 'subdivDensity' || 
+                    key === 'subdivRandom' || key === 'borderIrregularity' || 
+                    key === 'borderDepth' || key === 'borderSoftness' || 
+                    key === 'borderBrightness' || key === 'glassThickness' ||
+                    key === 'distortionStrength' || key === 'bevelAmount' ||
+                    key === 'bevelWidth' || key === 'backlight' || key === 'ambientLight' ||
+                    key === 'bloomStrength' || key === 'leadShadow' || key === 'saturation' ||
+                    key === 'luminanceBias' || key === 'dirtAmount' || key === 'crackIntensity' ||
+                    key === 'cloudiness' || key === 'leadAging') {
+                    display = parseFloat(value).toFixed(2);
+                } else if (key === 'borderThickness' || key === 'edgeBlur') {
+                    display = parseFloat(value).toFixed(1);
+                }
+                this.sliderValues[key].textContent = display;
+            }
+            
+            async handleFile(file) {
+                this.updateStatus('Loading image...', 'loading');
+                
+                try {
+                    if (this.onImageUpload) {
+                        await this.onImageUpload(file);
+                    }
+                } catch (error) {
+                    this.updateStatus(`Error: ${error.message}`, 'error');
+                    console.error(error);
+                }
+            }
+            
+            updateStatus(message, type = 'info') {
+                this.uploadStatus.textContent = message;
+                this.uploadStatus.className = 'status';
+                if (type === 'error') {
+                    this.uploadStatus.classList.add('error');
+                } else if (type === 'loading') {
+                    this.uploadStatus.classList.add('loading');
+                } else if (type === 'success') {
+                    this.uploadStatus.classList.add('success');
+                }
+            }
+            
+            updateProcessStatus(message, type = 'info') {
+                this.processStatus.textContent = message;
+                this.processStatus.className = 'status';
+                if (type === 'error') {
+                    this.processStatus.classList.add('error');
+                } else if (type === 'loading') {
+                    this.processStatus.classList.add('loading');
+                } else if (type === 'success') {
+                    this.processStatus.classList.add('success');
+                }
+            }
+            
+            updateImageInfo(imageData) {
+                this.imageInfo.innerHTML = `
+                    <div>Dimensions: ${imageData.width} × ${imageData.height}px</div>
+                    <div>Original: ${imageData.originalWidth} × ${imageData.originalHeight}px</div>
+                    <div>Ready for processing</div>
+                `;
+            }
+            
+            showGlassControls() {
+                this.glassSection.style.display = 'block';
+                this.borderSection.style.display = 'block';
+                document.getElementById('glassSection2').style.display = 'block';
+                document.getElementById('lightingSection').style.display = 'block';
+                document.getElementById('colorSection').style.display = 'block';
+                document.getElementById('agingSection').style.display = 'block';
+                document.getElementById('presetsSection').style.display = 'block';
+            }
+            
+            getSegmentationParams() {
+                return {
+                    edgeSensitivity: parseFloat(this.sliders.edgeSensitivity.value),
+                    edgeBlur: parseFloat(this.sliders.edgeBlur.value),
+                    minRegionArea: parseInt(this.sliders.minRegionArea.value),
+                    maxRegionArea: parseInt(this.sliders.maxRegionArea.value),
+                    subdivDensity: parseFloat(this.sliders.subdivDensity.value),
+                    subdivRandom: parseFloat(this.sliders.subdivRandom.value)
+                };
+            }
+            
+            setSegmentationParams(params) {
+                this.sliders.edgeSensitivity.value = params.edgeSensitivity;
+                this.sliders.edgeBlur.value = params.edgeBlur;
+                this.sliders.minRegionArea.value = params.minRegionArea;
+                this.sliders.maxRegionArea.value = params.maxRegionArea;
+                this.sliders.subdivDensity.value = params.subdivDensity;
+                this.sliders.subdivRandom.value = params.subdivRandom;
+                
+                // Update displays
+                Object.keys(params).forEach(key => {
+                    this.updateSliderValue(key, params[key]);
+                });
+            }
+            
+            setRenderParams(params) {
+                Object.keys(params).forEach(key => {
+                    if (this.sliders[key]) {
+                        this.sliders[key].value = params[key];
+                        this.updateSliderValue(key, params[key]);
+                    }
+                });
+            }
+            
+            setSeed(seed) {
+                this.seedInput.value = seed;
+            }
+            
+            getBorderParams() {
+                return {
+                    borderThickness: parseFloat(this.sliders.borderThickness.value),
+                    borderIrregularity: parseFloat(this.sliders.borderIrregularity.value),
+                    borderDepth: parseFloat(this.sliders.borderDepth.value),
+                    borderSoftness: parseFloat(this.sliders.borderSoftness.value),
+                    borderBrightness: parseFloat(this.sliders.borderBrightness.value)
+                };
+            }
+            
+            getAllRenderParams() {
+                return {
+                    ...this.getBorderParams(),
+                    glassThickness: parseFloat(this.sliders.glassThickness.value),
+                    distortionStrength: parseFloat(this.sliders.distortionStrength.value),
+                    distortionScale: parseFloat(this.sliders.distortionScale.value),
+                    bevelAmount: parseFloat(this.sliders.bevelAmount.value),
+                    bevelWidth: parseFloat(this.sliders.bevelWidth.value),
+                    backlight: parseFloat(this.sliders.backlight.value),
+                    lightAngle: parseFloat(this.sliders.lightAngle.value),
+                    ambientLight: parseFloat(this.sliders.ambientLight.value),
+                    bloomStrength: parseFloat(this.sliders.bloomStrength.value),
+                    leadShadow: parseFloat(this.sliders.leadShadow.value),
+                    colorQuant: parseFloat(this.sliders.colorQuant.value),
+                    saturation: parseFloat(this.sliders.saturation.value),
+                    luminanceBias: parseFloat(this.sliders.luminanceBias.value),
+                    dirtAmount: parseFloat(this.sliders.dirtAmount.value),
+                    crackIntensity: parseFloat(this.sliders.crackIntensity.value),
+                    cloudiness: parseFloat(this.sliders.cloudiness.value),
+                    leadAging: parseFloat(this.sliders.leadAging.value)
+                };
+            }
+            
+            setImageUploadCallback(callback) {
+                this.onImageUpload = callback;
+            }
+            
+            setRegenerateCallback(callback) {
+                this.onRegenerate = callback;
+            }
+            
+            setUpdateBordersCallback(callback) {
+                this.onUpdateBorders = callback;
+            }
+            
+            setUpdateMaterialCallback(callback) {
+                this.onUpdateMaterial = callback;
+            }
+            
+            setUpdateLightingCallback(callback) {
+                this.onUpdateLighting = callback;
+            }
+            
+            setUpdateColorCallback(callback) {
+                this.onUpdateColor = callback;
+            }
+            
+            setUpdateAgingCallback(callback) {
+                this.onUpdateAging = callback;
+            }
+            
+            setPresetChangeCallback(callback) {
+                this.onPresetChange = callback;
+            }
+            
+            setSeedChangeCallback(callback) {
+                this.onSeedChange = callback;
+            }
+            
+            setExportCallback(callback) {
+                this.onExport = callback;
+            }
+            
+            setResetAllCallback(callback) {
+                this.onResetAll = callback;
+            }
+            
+            setProcessing(isProcessing) {
+                this.regenerateBtn.disabled = isProcessing;
+                Object.values(this.sliders).forEach(slider => {
+                    slider.disabled = isProcessing;
+                });
+            }
+        }
+
+        // ============================================================================
+        // Module: Application
+        // Main application controller
+        // ============================================================================
+        class StainedGlassApp {
+            constructor() {
+                this.imageLoader = new ImageLoader();
+                this.renderer = new CanvasRenderer(document.getElementById('renderCanvas'));
+                this.ui = new UIController();
+                this.presetManager = new PresetManager();
+                this.exporter = new ImageExporter(document.getElementById('renderCanvas'));
+                
+                // Processing modules (created after image load)
+                this.segmenter = null;
+                this.glassRenderer = null;
+                
+                // Current state
+                this.currentImage = null;
+                this.currentCells = null;
+                this.currentCellMap = null;
+                this.randomSeed = Date.now();
+                
+                // Store default values for reset
+                this.defaultSegmentation = this.ui.getSegmentationParams();
+                this.defaultRender = this.ui.getAllRenderParams();
+                
+                this.initialize();
+            }
+            
+            initialize() {
+                // Set up UI callbacks
+                this.ui.setImageUploadCallback(async (file) => {
+                    await this.handleImageUpload(file);
+                });
+                
+                this.ui.setRegenerateCallback(() => {
+                    this.generateStainedGlass();
+                });
+                
+                this.ui.setUpdateBordersCallback(() => {
+                    this.updateBorders();
+                });
+                
+                this.ui.setUpdateMaterialCallback(() => {
+                    this.updateMaterial();
+                });
+                
+                this.ui.setUpdateLightingCallback(() => {
+                    this.updateLighting();
+                });
+                
+                this.ui.setUpdateColorCallback(() => {
+                    this.updateColor();
+                });
+                
+                this.ui.setUpdateAgingCallback(() => {
+                    this.updateAging();
+                });
+                
+                this.ui.setPresetChangeCallback((presetName) => {
+                    this.applyPreset(presetName);
+                });
+                
+                this.ui.setSeedChangeCallback((seed) => {
+                    this.changeSeed(seed);
+                });
+                
+                this.ui.setExportCallback(() => {
+                    this.exportImage();
+                });
+                
+                this.ui.setResetAllCallback(() => {
+                    this.resetAllSettings();
+                });
+                
+                // Initialize seed display
+                this.ui.setSeed(this.randomSeed);
+                
+                console.log('Stained Glass App initialized - Phase 6: Presets, Export & Polish');
+            }
+            
+            async handleImageUpload(file) {
+                try {
+                    // Load and preprocess image
+                    this.currentImage = await this.imageLoader.loadFromFile(file);
+                    
+                    // Display original on canvas temporarily
+                    this.renderer.drawProcessedImage(this.currentImage);
+                    
+                    // Update UI
+                    this.ui.updateStatus('Image loaded successfully', 'success');
+                    this.ui.updateImageInfo(this.currentImage);
+                    this.ui.showGlassControls();
+                    
+                    // Initialize processing modules with new edge-aware segmenter
+                    this.segmenter = new RegionSegmenter(
+                        this.currentImage.width,
+                        this.currentImage.height,
+                        this.currentImage.imageData
+                    );
+                    
+                    this.glassRenderer = new StainedGlassRenderer(
+                        document.getElementById('renderCanvas')
+                    );
+                    
+                    // Generate initial stained glass
+                    this.generateStainedGlass();
+                    
+                } catch (error) {
+                    throw error;
+                }
+            }
+            
+            generateStainedGlass() {
+                if (!this.currentImage) return;
+                
+                this.ui.setProcessing(true);
+                this.ui.updateProcessStatus('Segmenting image...', 'loading');
+                
+                // Use setTimeout to allow UI to update
+                setTimeout(() => {
+                    try {
+                        const params = this.ui.getSegmentationParams();
+                        params.seed = this.randomSeed;
+                        
+                        console.log('Generating stained glass with edge-aware segmentation:', params);
+                        const startTime = performance.now();
+                        
+                        // Step 1: Edge-aware segmentation (replaces Voronoi generation)
+                        const { cells, cellMap } = this.segmenter.segment(params);
+                        
+                        this.currentCells = cells;
+                        this.currentCellMap = cellMap;
+                        
+                        console.log(`Segmentation complete: ${cells.length} regions`);
+                        
+                        // Step 2: Initialize border renderer
+                        this.glassRenderer.initializeBorderRenderer(
+                            this.currentImage.width,
+                            this.currentImage.height,
+                            this.randomSeed
+                        );
+                        
+                        // Invalidate border cache since cells changed
+                        this.glassRenderer.invalidateBorderCache();
+                        
+                        // Step 3: Render with WebGL
+                        const renderParams = this.ui.getAllRenderParams();
+                        this.glassRenderer.renderWebGL(
+                            this.currentImage.width,
+                            this.currentImage.height,
+                            this.currentCells,
+                            this.currentCellMap,
+                            renderParams
+                        );
+                        
+                        const elapsed = performance.now() - startTime;
+                        console.log(`Rendering complete in ${elapsed.toFixed(0)}ms`);
+                        
+                        this.ui.updateProcessStatus(
+                            `Generated ${this.currentCells.length} glass pieces in ${elapsed.toFixed(0)}ms`,
+                            'success'
+                        );
+                        
+                    } catch (error) {
+                        console.error('Error generating stained glass:', error);
+                        this.ui.updateProcessStatus(`Error: ${error.message}`, 'error');
+                    } finally {
+                        this.ui.setProcessing(false);
+                    }
+                }, 10);
+            }
+            
+            updateBorders() {
+                this.quickUpdate('borders');
+            }
+            
+            updateMaterial() {
+                this.quickUpdate('material');
+            }
+            
+            updateLighting() {
+                this.quickUpdate('lighting');
+            }
+            
+            updateColor() {
+                this.quickUpdate('color');
+            }
+            
+            updateAging() {
+                this.quickUpdate('aging');
+            }
+            
+            quickUpdate(type) {
+                if (!this.currentImage || !this.currentCells || !this.currentCellMap) {
+                    console.log('No glass to update');
+                    return;
+                }
+                
+                this.ui.updateProcessStatus(`Updating ${type}...`, 'loading');
+                
+                // Use setTimeout for UI responsiveness
+                setTimeout(() => {
+                    try {
+                        const startTime = performance.now();
+                        
+                        // Re-render with updated parameters (GPU-accelerated, very fast)
+                        const renderParams = this.ui.getAllRenderParams();
+                        this.glassRenderer.renderWebGL(
+                            this.currentImage.width,
+                            this.currentImage.height,
+                            this.currentCells,
+                            this.currentCellMap,
+                            renderParams
+                        );
+                        
+                        const elapsed = performance.now() - startTime;
+                        console.log(`${type} updated in ${elapsed.toFixed(0)}ms`);
+                        
+                        this.ui.updateProcessStatus(
+                            `Updated in ${elapsed.toFixed(0)}ms`,
+                            'success'
+                        );
+                        
+                    } catch (error) {
+                        console.error(`Error updating ${type}:`, error);
+                        this.ui.updateProcessStatus(`Error: ${error.message}`, 'error');
+                    }
+                }, 10);
+            }
+            
+            applyPreset(presetName) {
+                const preset = this.presetManager.getPreset(presetName);
+                if (!preset) {
+                    console.error('Preset not found:', presetName);
+                    return;
+                }
+                
+                console.log('Applying preset:', preset.name);
+                
+                // Apply segmentation parameters
+                this.ui.setSegmentationParams(preset.segmentation);
+                
+                // Apply render parameters
+                this.ui.setRenderParams(preset.render);
+                
+                // Trigger full regeneration if we have an image
+                if (this.currentImage) {
+                    this.ui.updateProcessStatus(`Applying preset: ${preset.name}...`, 'loading');
+                    setTimeout(() => {
+                        this.generateStainedGlass();
+                    }, 100);
+                }
+            }
+            
+            changeSeed(newSeed) {
+                this.randomSeed = newSeed;
+                console.log('Seed changed to:', newSeed);
+                
+                // Regenerate if we have an image
+                if (this.currentImage) {
+                    this.ui.updateProcessStatus('Regenerating with new seed...', 'loading');
+                    setTimeout(() => {
+                        this.generateStainedGlass();
+                    }, 100);
+                }
+            }
+            
+            exportImage() {
+                if (!this.currentImage) {
+                    alert('Please load an image first');
+                    return;
+                }
+                
+                this.ui.updateProcessStatus('Exporting image...', 'loading');
+                
+                const success = this.exporter.exportImage('stained-glass');
+                
+                if (success) {
+                    this.ui.updateProcessStatus('Image exported successfully!', 'success');
+                } else {
+                    this.ui.updateProcessStatus('Export failed', 'error');
+                }
+            }
+            
+            resetAllSettings() {
+                console.log('Resetting all settings to defaults');
+                
+                // Reset segmentation params
+                this.ui.setSegmentationParams(this.defaultSegmentation);
+                
+                // Reset render params
+                this.ui.setRenderParams(this.defaultRender);
+                
+                // Reset seed to timestamp
+                this.randomSeed = Date.now();
+                this.ui.setSeed(this.randomSeed);
+                
+                // Clear preset selection
+                this.ui.presetSelect.value = '';
+                
+                // Regenerate if we have an image
+                if (this.currentImage) {
+                    this.ui.updateProcessStatus('Resetting to defaults...', 'loading');
+                    setTimeout(() => {
+                        this.generateStainedGlass();
+                    }, 100);
+                }
+            }
+        }
+
+        // ============================================================================
+        // Initialize Application
+        // ============================================================================
+        const app = new StainedGlassApp();
+    </script>
+</body>
+</html>
