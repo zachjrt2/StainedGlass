@@ -907,368 +907,220 @@
             
             // Fragment shader: stained glass effect with all material properties
             getFragmentShader() {
-                return `
-                    precision mediump float;
-                    
-                    varying vec2 v_texCoord;
-                    
-                    // Textures
-                    uniform sampler2D u_cellMap;         // Region ID map
-                    uniform sampler2D u_colorMap;        // Base colors per cell
-                    uniform sampler2D u_distanceField;   // Distance to borders
-                    uniform sampler2D u_noiseTexture;    // Perlin noise
-                    
-                    // Dimensions
-                    uniform vec2 u_resolution;
-                    
-                    // Border parameters
-                    uniform float u_borderThickness;
-                    uniform float u_borderIrregularity;
-                    uniform float u_borderDepth;
-                    uniform float u_borderSoftness;
-                    uniform float u_borderBrightness;
-                    
-                    // Glass material parameters
-                    uniform float u_glassThickness;
-                    uniform float u_distortionStrength;
-                    uniform float u_distortionScale;
-                    uniform float u_bevelAmount;
-                    uniform float u_bevelWidth;
-                    
-                    // Lighting parameters
-                    uniform float u_backlightStrength;
-                    uniform vec2 u_lightDirection;
-                    uniform float u_ambientLight;
-                    uniform float u_bloomStrength;
-                    uniform float u_leadShadow;
-                    
-                    // Color parameters
-                    uniform float u_colorQuant;
-                    uniform float u_saturation;
-                    uniform float u_luminanceBias;
-                    
-                    // Aging parameters
-                    uniform float u_dirtAmount;
-                    uniform float u_crackIntensity;
-                    uniform float u_cloudiness;
-                    uniform float u_leadAging;
-                    
-                    // Helper: Get cell ID at position
-                    float getCellId(vec2 uv) {
-                        vec4 cell = texture2D(u_cellMap, uv);
-                        return cell.r + cell.g * 255.0 + cell.b * 65025.0;
-                    }
-                    
-                    // Helper: Get cell color
-                    vec3 getCellColor(float cellId) {
-                        // Map cell ID to texture coordinate
-                        float u = mod(cellId, 256.0) / 256.0;
-                        float v = floor(cellId / 256.0) / 256.0;
-                        return texture2D(u_colorMap, vec2(u, v)).rgb;
-                    }
-                    
-                    // Helper: Get distance to border
-                    float getBorderDistance(vec2 uv) {
-                        return texture2D(u_distanceField, uv).r;
-                    }
-                    
-                    // Helper: Get noise value
-                    float getNoise(vec2 uv) {
-                        return texture2D(u_noiseTexture, uv).r;
-                    }
-                    
-                    // RGB to HSL conversion
-                    vec3 rgb2hsl(vec3 rgb) {
-                        float maxVal = max(max(rgb.r, rgb.g), rgb.b);
-                        float minVal = min(min(rgb.r, rgb.g), rgb.b);
-                        float delta = maxVal - minVal;
-                        
-                        float l = (maxVal + minVal) / 2.0;
-                        
-                        if (delta < 0.00001) {
-                            return vec3(0.0, 0.0, l);
-                        }
-                        
-                        float s = l < 0.5 ? delta / (maxVal + minVal) : delta / (2.0 - maxVal - minVal);
-                        
-                        float h;
-                        if (rgb.r == maxVal) {
-                            h = (rgb.g - rgb.b) / delta;
-                        } else if (rgb.g == maxVal) {
-                            h = 2.0 + (rgb.b - rgb.r) / delta;
-                        } else {
-                            h = 4.0 + (rgb.r - rgb.g) / delta;
-                        }
-                        h = h / 6.0;
-                        if (h < 0.0) h += 1.0;
-                        
-                        return vec3(h, s, l);
-                    }
-                    
-                    // HSL to RGB conversion
-                    vec3 hsl2rgb(vec3 hsl) {
-                        float h = hsl.x;
-                        float s = hsl.y;
-                        float l = hsl.z;
-                        
-                        if (s < 0.00001) {
-                            return vec3(l);
-                        }
-                        
-                        float q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
-                        float p = 2.0 * l - q;
-                        
-                        float hue2rgb(float p, float q, float t) {
-                            if (t < 0.0) t += 1.0;
-                            if (t > 1.0) t -= 1.0;
-                            if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
-                            if (t < 1.0/2.0) return q;
-                            if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
-                            return p;
-                        }
-                        
-                        return vec3(
-                            hue2rgb(p, q, h + 1.0/3.0),
-                            hue2rgb(p, q, h),
-                            hue2rgb(p, q, h - 1.0/3.0)
-                        );
-                    }
-                    
-                    // Color quantization
-                    vec3 quantizeColor(vec3 color, float levels) {
-                        if (levels < 2.5) return color;
-                        
-                        vec3 hsl = rgb2hsl(color);
-                        
-                        // Quantize hue and saturation
-                        hsl.x = floor(hsl.x * levels) / levels;
-                        hsl.y = floor(hsl.y * (levels * 0.5)) / (levels * 0.5);
-                        
-                        return hsl2rgb(hsl);
-                    }
-                    
-                    // Apply saturation boost
-                    vec3 adjustSaturation(vec3 color, float satBoost) {
-                        vec3 hsl = rgb2hsl(color);
-                        hsl.y = clamp(hsl.y * satBoost, 0.0, 1.0);
-                        return hsl2rgb(hsl);
-                    }
-                    
-                    // Compute border effect
-                    float computeBorderAlpha(float dist, vec2 uv) {
-                        // Add noise-based irregularity
-                        float noise = getNoise(uv * u_distortionScale);
-                        dist += (noise - 0.5) * u_borderIrregularity * 0.3;
-                        
-                        // Compute border intensity
-                        float threshold = u_borderThickness / 100.0;
-                        
-                        if (dist < threshold) {
-                            float t = dist / threshold;
-                            // Apply softness
-                            float softT = pow(t, 1.0 + u_borderSoftness * 3.0);
-                            return 1.0 - softT;
-                        }
-                        
-                        return 0.0;
-                    }
-                    
-                    // Compute bevel highlight based on distance field gradient
-                    float computeBevel(vec2 uv, float dist) {
-                        if (dist > u_bevelWidth) return 0.0;
-                        
-                        // Sample distance field neighbors for gradient
-                        float pixelSize = 1.0 / u_resolution.x;
-                        float dx = getBorderDistance(uv + vec2(pixelSize, 0.0)) - 
-                                   getBorderDistance(uv - vec2(pixelSize, 0.0));
-                        float dy = getBorderDistance(uv + vec2(0.0, pixelSize)) - 
-                                   getBorderDistance(uv - vec2(0.0, pixelSize));
-                        
-                        // Gradient direction
-                        vec2 grad = normalize(vec2(dx, dy));
-                        
-                        // Dot with light direction for highlight
-                        float highlight = max(0.0, dot(grad, u_lightDirection));
-                        
-                        // Fade based on distance from edge
-                        float bevelFade = 1.0 - (dist / u_bevelWidth);
-                        
-                        return highlight * bevelFade * u_bevelAmount;
-                    }
-                    
-                    // Apply glass thickness effect (darker = thicker)
-                    vec3 applyThickness(vec3 color, float thickness) {
-                        // Thicker glass absorbs more light
-                        float absorption = thickness * 0.5;
-                        return color * (1.0 - absorption);
-                    }
-                    
-                    // Apply surface distortion
-                    vec2 applyDistortion(vec2 uv) {
-                        if (u_distortionStrength < 0.01) return uv;
-                        
-                        // Sample noise at multiple scales
-                        vec2 offset1 = vec2(
-                            getNoise(uv * u_distortionScale) - 0.5,
-                            getNoise(uv * u_distortionScale + vec2(100.0, 100.0)) - 0.5
-                        );
-                        
-                        vec2 offset2 = vec2(
-                            getNoise(uv * u_distortionScale * 2.0 + vec2(200.0, 0.0)) - 0.5,
-                            getNoise(uv * u_distortionScale * 2.0 + vec2(0.0, 200.0)) - 0.5
-                        );
-                        
-                        vec2 offset = (offset1 + offset2 * 0.5) * u_distortionStrength * 0.02;
-                        
-                        return uv + offset;
-                    }
-                    
-                    // Apply dirt and dust overlay
-                    vec3 applyDirt(vec3 color, vec2 uv) {
-                        if (u_dirtAmount < 0.01) return color;
-                        
-                        // Multi-scale dirt noise
-                        float dirt = getNoise(uv * 50.0) * 0.6 + 
-                                     getNoise(uv * 150.0) * 0.3 +
-                                     getNoise(uv * 400.0) * 0.1;
-                        
-                        // Dirt darkens and desaturates
-                        float dirtFactor = 1.0 - u_dirtAmount * dirt * 0.5;
-                        return color * dirtFactor;
-                    }
-                    
-                    // Apply crack overlay
-                    vec3 applyCracks(vec3 color, vec2 uv, float dist) {
-                        if (u_crackIntensity < 0.01) return color;
-                        
-                        // Generate cracks using noise
-                        float crackNoise = getNoise(uv * 200.0 + vec2(500.0, 500.0));
-                        
-                        // Cracks appear as thin dark lines
-                        float crackThreshold = 0.5 + u_crackIntensity * 0.3;
-                        if (crackNoise > crackThreshold) {
-                            float crackStrength = (crackNoise - crackThreshold) / (1.0 - crackThreshold);
-                            float crack = 1.0 - crackStrength * u_crackIntensity * 0.7;
-                            return color * crack;
-                        }
-                        
-                        return color;
-                    }
-                    
-                    // Apply glass cloudiness/aging
-                    vec3 applyCloudiness(vec3 color, vec2 uv) {
-                        if (u_cloudiness < 0.01) return color;
-                        
-                        // Cloudy glass reduces color intensity and adds whitish cast
-                        float cloudNoise = getNoise(uv * 80.0 + vec2(1000.0, 1000.0));
-                        float cloudAmount = cloudNoise * u_cloudiness;
-                        
-                        vec3 cloudColor = vec3(0.9, 0.9, 0.85); // Slight warm tint
-                        return mix(color, cloudColor, cloudAmount * 0.4);
-                    }
-                    
-                    // Compute bloom effect
-                    vec3 computeBloom(vec3 color, float brightness) {
-                        if (u_bloomStrength < 0.01) return vec3(0.0);
-                        
-                        // Bloom on bright areas
-                        float luminance = dot(color, vec3(0.299, 0.587, 0.114));
-                        
-                        if (luminance > 0.6) {
-                            float bloomAmount = (luminance - 0.6) / 0.4;
-                            return color * bloomAmount * u_bloomStrength * 0.5;
-                        }
-                        
-                        return vec3(0.0);
-                    }
-                    
-                    void main() {
-                        vec2 uv = v_texCoord;
-                        
-                        // Apply surface distortion to lookup
-                        vec2 distortedUv = applyDistortion(uv);
-                        distortedUv = clamp(distortedUv, 0.0, 1.0);
-                        
-                        // Get cell info
-                        float cellId = getCellId(distortedUv);
-                        vec3 baseColor = getCellColor(cellId);
-                        
-                        // Apply color quantization
-                        baseColor = quantizeColor(baseColor, u_colorQuant);
-                        
-                        // Apply saturation adjustment
-                        baseColor = adjustSaturation(baseColor, u_saturation);
-                        
-                        // Get distance to border
-                        float borderDist = getBorderDistance(uv);
-                        
-                        // Start with base glass color
-                        vec3 color = baseColor;
-                        
-                        // Apply glass thickness effect
-                        color = applyThickness(color, u_glassThickness);
-                        
-                        // Apply luminance bias
-                        color += vec3(u_luminanceBias);
-                        
-                        // Apply backlight (makes glass glow)
-                        color *= (1.0 + u_backlightStrength);
-                        
-                        // Apply cloudiness
-                        color = applyCloudiness(color, uv);
-                        
-                        // Add ambient light
-                        color += vec3(u_ambientLight);
-                        
-                        // Add bevel highlights near edges
-                        float bevel = computeBevel(uv, borderDist);
-                        color += vec3(bevel * 0.5);
-                        
-                        // Apply dirt/dust
-                        color = applyDirt(color, uv);
-                        
-                        // Apply cracks
-                        color = applyCracks(color, uv, borderDist);
-                        
-                        // Compute bloom
-                        vec3 bloom = computeBloom(color, u_backlightStrength);
-                        color += bloom;
-                        
-                        // Compute and apply border
-                        float borderAlpha = computeBorderAlpha(borderDist, uv);
-                        
-                        if (borderAlpha > 0.01) {
-                            // Lead color with depth
-                            float shadowAmount = u_borderDepth * (1.0 - borderDist / (u_borderThickness / 100.0));
-                            
-                            // Additional shadow from lead shadow parameter
-                            shadowAmount += u_leadShadow * 0.3;
-                            
-                            float shadowFactor = 1.0 - clamp(shadowAmount, 0.0, 0.8);
-                            
-                            vec3 leadColor = vec3(u_borderBrightness) * shadowFactor;
-                            
-                            // Add slight color tint from glass
-                            leadColor += baseColor * 0.1;
-                            
-                            // Apply lead aging (oxidation/patina)
-                            if (u_leadAging > 0.01) {
-                                float agingNoise = getNoise(uv * 100.0 + vec2(2000.0, 2000.0));
-                                vec3 patinaColor = vec3(0.3, 0.35, 0.3); // Greenish patina
-                                leadColor = mix(leadColor, patinaColor, agingNoise * u_leadAging * 0.6);
-                            }
-                            
-                            // Blend border with glass
-                            color = mix(color, leadColor, borderAlpha);
-                        }
-                        
-                        // Final clamp
-                        color = clamp(color, 0.0, 1.0);
-                        
-                        gl_FragColor = vec4(color, 1.0);
-                    }
-                `;
+    return `
+        precision mediump float;
+        
+        varying vec2 v_texCoord;
+        
+        // --- Textures ---
+        uniform sampler2D u_cellMap;
+        uniform sampler2D u_colorMap;
+        uniform sampler2D u_distanceField;
+        uniform sampler2D u_noiseTexture;
+        
+        // --- Uniforms ---
+        uniform vec2 u_resolution;
+        uniform float u_borderThickness;
+        uniform float u_borderIrregularity;
+        uniform float u_borderDepth;
+        uniform float u_borderSoftness;
+        uniform float u_borderBrightness;
+        uniform float u_glassThickness;
+        uniform float u_distortionStrength;
+        uniform float u_distortionScale;
+        uniform float u_bevelAmount;
+        uniform float u_bevelWidth;
+        uniform float u_backlightStrength;
+        uniform vec2 u_lightDirection;
+        uniform float u_ambientLight;
+        uniform float u_bloomStrength;
+        uniform float u_leadShadow;
+        uniform float u_colorQuant;
+        uniform float u_saturation;
+        uniform float u_luminanceBias;
+        uniform float u_dirtAmount;
+        uniform float u_crackIntensity;
+        uniform float u_cloudiness;
+        uniform float u_leadAging;
+
+        // --- Helper Functions (Global Scope) ---
+
+        float getCellId(vec2 uv) {
+            vec4 cell = texture2D(u_cellMap, uv);
+            return cell.r * 255.0 + cell.g * 65025.0 + cell.b * 16581375.0; 
+        }
+
+        vec3 getCellColor(float cellId) {
+            float u = mod(cellId, 256.0) / 256.0;
+            float v = floor(cellId / 256.0) / 256.0;
+            return texture2D(u_colorMap, vec2(u, v)).rgb;
+        }
+
+        float getBorderDistance(vec2 uv) {
+            return texture2D(u_distanceField, uv).r;
+        }
+
+        float getNoise(vec2 uv) {
+            return texture2D(u_noiseTexture, uv).r;
+        }
+
+        vec3 rgb2hsl(vec3 rgb) {
+            float maxVal = max(max(rgb.r, rgb.g), rgb.b);
+            float minVal = min(min(rgb.r, rgb.g), rgb.b);
+            float delta = maxVal - minVal;
+            float l = (maxVal + minVal) / 2.0;
+            if (delta < 0.00001) return vec3(0.0, 0.0, l);
+            float s = l < 0.5 ? delta / (maxVal + minVal) : delta / (2.0 - maxVal - minVal);
+            float h;
+            if (rgb.r == maxVal) h = (rgb.g - rgb.b) / delta;
+            else if (rgb.g == maxVal) h = 2.0 + (rgb.b - rgb.r) / delta;
+            else h = 4.0 + (rgb.r - rgb.g) / delta;
+            h /= 6.0;
+            if (h < 0.0) h += 1.0;
+            return vec3(h, s, l);
+        }
+
+        // MOVED: hue2rgb is now a standalone global function
+        float hue2rgb(float p, float q, float t) {
+            if (t < 0.0) t += 1.0;
+            if (t > 1.0) t -= 1.0;
+            if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
+            if (t < 1.0/2.0) return q;
+            if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
+            return p;
+        }
+
+        vec3 hsl2rgb(vec3 hsl) {
+            float h = hsl.x;
+            float s = hsl.y;
+            float l = hsl.z;
+            if (s < 0.00001) return vec3(l);
+            float q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+            float p = 2.0 * l - q;
+            return vec3(
+                hue2rgb(p, q, h + 1.0/3.0),
+                hue2rgb(p, q, h),
+                hue2rgb(p, q, h - 1.0/3.0)
+            );
+        }
+
+        vec3 quantizeColor(vec3 color, float levels) {
+            if (levels < 2.5) return color;
+            vec3 hsl = rgb2hsl(color);
+            hsl.x = floor(hsl.x * levels) / levels;
+            hsl.y = floor(hsl.y * (levels * 0.5)) / (levels * 0.5);
+            return hsl2rgb(hsl);
+        }
+
+        vec3 adjustSaturation(vec3 color, float satBoost) {
+            vec3 hsl = rgb2hsl(color);
+            hsl.y = clamp(hsl.y * satBoost, 0.0, 1.0);
+            return hsl2rgb(hsl);
+        }
+
+        float computeBorderAlpha(float dist, vec2 uv) {
+            float noise = getNoise(uv * u_distortionScale);
+            dist += (noise - 0.5) * u_borderIrregularity * 0.3;
+            float threshold = u_borderThickness / 100.0;
+            if (dist < threshold) {
+                float t = dist / threshold;
+                return 1.0 - pow(t, 1.0 + u_borderSoftness * 3.0);
             }
+            return 0.0;
+        }
+
+        float computeBevel(vec2 uv, float dist) {
+            if (dist > u_bevelWidth) return 0.0;
+            float pixelSize = 1.0 / u_resolution.x;
+            float dx = getBorderDistance(uv + vec2(pixelSize, 0.0)) - getBorderDistance(uv - vec2(pixelSize, 0.0));
+            float dy = getBorderDistance(uv + vec2(0.0, pixelSize)) - getBorderDistance(uv - vec2(0.0, pixelSize));
+            vec2 grad = normalize(vec2(dx, dy));
+            float highlight = max(0.0, dot(grad, u_lightDirection));
+            return highlight * (1.0 - (dist / u_bevelWidth)) * u_bevelAmount;
+        }
+
+        vec3 applyThickness(vec3 color, float thickness) {
+            return color * (1.0 - (thickness * 0.5));
+        }
+
+        vec2 applyDistortion(vec2 uv) {
+            if (u_distortionStrength < 0.01) return uv;
+            vec2 offset1 = vec2(getNoise(uv * u_distortionScale) - 0.5, getNoise(uv * u_distortionScale + 100.0) - 0.5);
+            vec2 offset2 = vec2(getNoise(uv * u_distortionScale * 2.0 + 200.0) - 0.5, getNoise(uv * u_distortionScale * 2.0 + 0.0) - 0.5);
+            return uv + (offset1 + offset2 * 0.5) * u_distortionStrength * 0.02;
+        }
+
+        vec3 applyDirt(vec3 color, vec2 uv) {
+            if (u_dirtAmount < 0.01) return color;
+            float dirt = getNoise(uv * 50.0) * 0.6 + getNoise(uv * 150.0) * 0.3 + getNoise(uv * 400.0) * 0.1;
+            return color * (1.0 - u_dirtAmount * dirt * 0.5);
+        }
+
+        vec3 applyCracks(vec3 color, vec2 uv, float dist) {
+            if (u_crackIntensity < 0.01) return color;
+            float crackNoise = getNoise(uv * 200.0 + 500.0);
+            float crackThreshold = 0.5 + u_crackIntensity * 0.3;
+            if (crackNoise > crackThreshold) {
+                float crackStrength = (crackNoise - crackThreshold) / (1.0 - crackThreshold);
+                return color * (1.0 - crackStrength * u_crackIntensity * 0.7);
+            }
+            return color;
+        }
+
+        vec3 applyCloudiness(vec3 color, vec2 uv) {
+            if (u_cloudiness < 0.01) return color;
+            float cloudAmount = getNoise(uv * 80.0 + 1000.0) * u_cloudiness;
+            return mix(color, vec3(0.9, 0.9, 0.85), cloudAmount * 0.4);
+        }
+
+        vec3 computeBloom(vec3 color, float brightness) {
+            if (u_bloomStrength < 0.01) return vec3(0.0);
+            float luminance = dot(color, vec3(0.299, 0.587, 0.114));
+            if (luminance > 0.6) {
+                return color * ((luminance - 0.6) / 0.4) * u_bloomStrength * 0.5;
+            }
+            return vec3(0.0);
+        }
+
+        void main() {
+            vec2 uv = v_texCoord;
+            vec2 distortedUv = clamp(applyDistortion(uv), 0.0, 1.0);
+            
+            float cellId = getCellId(distortedUv);
+            vec3 baseColor = getCellColor(cellId);
+            baseColor = quantizeColor(baseColor, u_colorQuant);
+            baseColor = adjustSaturation(baseColor, u_saturation);
+            
+            float borderDist = getBorderDistance(uv);
+            vec3 color = baseColor;
+            color = applyThickness(color, u_glassThickness);
+            color += vec3(u_luminanceBias);
+            color *= (1.0 + u_backlightStrength);
+            color = applyCloudiness(color, uv);
+            color += vec3(u_ambientLight);
+            color += vec3(computeBevel(uv, borderDist) * 0.5);
+            color = applyDirt(color, uv);
+            color = applyCracks(color, uv, borderDist);
+            color += computeBloom(color, u_backlightStrength);
+            
+            float borderAlpha = computeBorderAlpha(borderDist, uv);
+            if (borderAlpha > 0.01) {
+                float shadowAmount = u_borderDepth * (1.0 - borderDist / (u_borderThickness / 100.0)) + u_leadShadow * 0.3;
+                float shadowFactor = 1.0 - clamp(shadowAmount, 0.0, 0.8);
+                vec3 leadColor = vec3(u_borderBrightness) * shadowFactor + baseColor * 0.1;
+                
+                if (u_leadAging > 0.01) {
+                    float agingNoise = getNoise(uv * 100.0 + 2000.0);
+                    leadColor = mix(leadColor, vec3(0.3, 0.35, 0.3), agingNoise * u_leadAging * 0.6);
+                }
+                color = mix(color, leadColor, borderAlpha);
+            }
+            
+            gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+        }
+    `;
+}
+            
             
             // Create and compile shader program
             createShaderProgram(vertexSource, fragmentSource) {
@@ -2704,6 +2556,86 @@
             
             getSites() {
                 return this.sites;
+            }
+            generateTextures() {
+                const width = this.width;
+                const height = this.height;
+                
+                // Buffers for the GPU: 4 bytes (RGBA) per pixel
+                const cellMap = new Uint8Array(width * height * 4);
+                const distanceField = new Uint8Array(width * height * 4);
+
+                // 1. Create a spatial lookup grid to make the pixel loop fast
+                const gridSize = 20; // 20x20 grid
+                const spatialGrid = Array(gridSize * gridSize).fill(null).map(() => []);
+                const cellW = width / gridSize;
+                const cellH = height / gridSize;
+
+                this.sites.forEach((site, index) => {
+                    const gx = Math.min(gridSize - 1, Math.floor(site.x / cellW));
+                    const gy = Math.min(gridSize - 1, Math.floor(site.y / cellH));
+                    spatialGrid[gy * gridSize + gx].push({ site, index });
+                });
+
+                // 2. Loop through every pixel
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let minDist = Infinity;
+                        let secondMinDist = Infinity;
+                        let closestIndex = 0;
+
+                        const gx = Math.floor(x / cellW);
+                        const gy = Math.floor(y / cellH);
+
+                        // 3. Search only neighboring spatial grid cells (Fast!)
+                        for (let offsetPy = -1; offsetPy <= 1; offsetPy++) {
+                            for (let offsetPx = -1; offsetPx <= 1; offsetPx++) {
+                                const nx = gx + offsetPx;
+                                const ny = gy + offsetPy;
+
+                                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) {
+                                    const cellSites = spatialGrid[ny * gridSize + nx];
+                                    for (const item of cellSites) {
+                                        // Math.hypot is precise but slower; x*x+y*y is faster for comparisons
+                                        const dx = x - item.site.x;
+                                        const dy = y - item.site.y;
+                                        const d2 = dx * dx + dy * dy;
+
+                                        if (d2 < minDist) {
+                                            secondMinDist = minDist;
+                                            minDist = d2;
+                                            closestIndex = item.index;
+                                        } else if (d2 < secondMinDist) {
+                                            secondMinDist = d2;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        const pixelIdx = (y * width + x) * 4;
+
+                        // 4. Encode Cell ID (16-bit) into Red and Green channels
+                        cellMap[pixelIdx]     = closestIndex % 256;          // Remainder
+                        cellMap[pixelIdx + 1] = Math.floor(closestIndex / 256); // Quotient
+                        cellMap[pixelIdx + 3] = 255; // Alpha
+
+                        // 5. Calculate normalized distance to border
+                        // We use sqrt here for accurate linear borders
+                        const d1 = Math.sqrt(minDist);
+                        const d2 = Math.sqrt(secondMinDist);
+                        
+                        // Normalization: (d2 - d1) is the distance to the Voronoi edge
+                        // We divide by a factor (e.g., 15.0) to control the 'width' of the distance gradient
+                        let edgeDist = (d2 - d1) / 15.0; 
+                        let colorVal = Math.min(255, Math.max(0, edgeDist * 255));
+                        
+                        distanceField[pixelIdx] = colorVal;
+                        distanceField[pixelIdx + 3] = 255;
+                    }
+                }
+
+                return { cellMap, distanceField };
             }
         }
 
