@@ -2338,7 +2338,7 @@
         class StainedGlassRenderer {
             constructor(canvas) {
                 this.canvas = canvas;
-                this.ctx = canvas.getContext('2d');
+                this.ctx = null; // Don't get 2D context yet
                 this.webglRenderer = null;
                 this.borderRenderer = null;
                 this.borderCache = null;
@@ -2393,11 +2393,15 @@
             
             // Render basic flat stained glass (Phase 2 - simple version)
             renderBasic(width, height, cells, cellMap) {
+                // Get 2D context if we don't have it
+                if (!this.ctx) {
+                    this.ctx = this.canvas.getContext('2d');
+                }
+                
                 this.canvas.width = width;
                 this.canvas.height = height;
                 
                 const imageData = this.ctx.createImageData(width, height);
-                const data = imageData.data;
                 
                 // Fill each pixel with its cell color
                 for (let y = 0; y < height; y++) {
@@ -3397,9 +3401,6 @@
                     // Load and preprocess image
                     this.currentImage = await this.imageLoader.loadFromFile(file);
                     
-                    // Display original on canvas temporarily
-                    this.renderer.drawProcessedImage(this.currentImage);
-                    
                     // Update UI
                     this.ui.updateStatus('Image loaded successfully', 'success');
                     this.ui.updateImageInfo(this.currentImage);
@@ -3412,16 +3413,9 @@
                         this.currentImage.imageData
                     );
                     
-                    this.glassRenderer = new StainedGlassRenderer(
-                        document.getElementById('renderCanvas')
-                    );
-                    
-                    // Generate initial stained glass
-                    this.generateStainedGlass();
-                    
-                } catch (error) {
-                    throw error;
-                }
+                    // Get fresh canvas element for WebGL
+                    const canvas = document.getElementById('renderCanvas');
+                    this.glassRenderer = new StainedGlassRenderer(canvas);
             }
             
             generateStainedGlass() {
