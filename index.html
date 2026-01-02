@@ -3199,6 +3199,9 @@
                     const time = new Date().toLocaleTimeString();
                     debugOutput.innerHTML += `[${time}] ${message}<br>`;
                     debugOutput.scrollTop = debugOutput.scrollHeight;
+                } else {
+                    // Fallback to status if debug output doesn't exist
+                    this.uploadStatus.textContent = message;
                 }
             }
             
@@ -3215,6 +3218,10 @@
                         }
                     }
                     debugOutput.scrollTop = debugOutput.scrollHeight;
+                } else {
+                    // Fallback to status if debug output doesn't exist
+                    this.uploadStatus.textContent = `ERROR: ${message} - ${error ? error.toString() : ''}`;
+                    this.uploadStatus.className = 'status error';
                 }
             }
             
