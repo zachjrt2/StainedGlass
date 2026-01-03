@@ -345,9 +345,9 @@
                 <div class="slider-group">
                     <div class="slider-label">
                         <span>Original Detail</span>
-                        <span class="slider-value" id="originalDetailValue">0.3</span>
+                        <span class="slider-value" id="originalDetailValue">0.7</span>
                     </div>
-                    <input type="range" id="originalDetail" min="0" max="1" value="0.3" step="0.05">
+                    <input type="range" id="originalDetail" min="0" max="1" value="0.7" step="0.05">
                 </div>
                 <div class="slider-group">
                     <div class="slider-label">
@@ -1115,15 +1115,21 @@
             vec3 flatColor = getCellColor(cellId);
             vec3 originalColor = texture2D(u_originalImage, distortedUv).rgb;
 
-            // Blend between flat cell color and original detail
+          // Enhanced version - preserves more detail
             vec3 baseColor = mix(flatColor, originalColor, u_originalDetail);
-            baseColor = quantizeColor(baseColor, u_colorQuant);
 
+            // Only quantize if we're using more stained glass effect
+            if (u_originalDetail < 0.5) {
+                baseColor = quantizeColor(baseColor, u_colorQuant);
+            }
+
+            // Reduce noise variation when showing more original image
+            float variationAmount = (1.0 - u_originalDetail) * 0.15;
             float noiseVariation = getNoise(uv * 150.0);
             vec3 variation = vec3(
-                (noiseVariation - 0.5) * 0.15, // ±7.5% variation
-                (getNoise(uv * 150.0 + 100.0) - 0.5) * 0.15,
-                (getNoise(uv * 150.0 + 200.0) - 0.5) * 0.15
+                (noiseVariation - 0.5) * variationAmount,
+                (getNoise(uv * 150.0 + 100.0) - 0.5) * variationAmount,
+                (getNoise(uv * 150.0 + 200.0) - 0.5) * variationAmount
             );
             baseColor = baseColor * (1.0 + variation);
             
@@ -1683,6 +1689,162 @@ console.log('Original image texture uploaded');
                 this.imageData = imageData;
             }
 
+            // NEW: Subdivide edges into strips/bands
+        subdivideEdges(edgeMap, stripWidth = 3) {
+            console.log(`Subdividing edges into strips (width: ${stripWidth})...`);
+            
+            const edgeRegionMap = new Uint16Array(this.width * this.height);
+            const edgeRegions = [];
+            let regionId = 1;
+            
+            // Step 1: Thicken edges into strips
+            const thickEdges = new Uint8Array(this.width * this.height);
+            
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    const idx = y * this.width + x;
+                    if (edgeMap[idx] === 1) {
+                        // Mark this pixel and neighbors as edge strip
+                        for (let dy = -stripWidth; dy <= stripWidth; dy++) {
+                            for (let dx = -stripWidth; dx <= stripWidth; dx++) {
+                                const nx = x + dx;
+                                const ny = y + dy;
+                                if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {
+                                    const nIdx = ny * this.width + nx;
+                                    const dist = Math.sqrt(dx * dx + dy * dy);
+                                    if (dist <= stripWidth) {
+                                        thickEdges[nIdx] = 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Step 2: Extract edge strips as regions
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    const idx = y * this.width + x;
+                    
+                    if (thickEdges[idx] === 1 && edgeRegionMap[idx] === 0) {
+                        const region = this.floodFillEdgeStrip(x, y, regionId, thickEdges, edgeRegionMap);
+                        if (region.pixels.length > 10) { // Keep strips with at least 10 pixels
+                            edgeRegions.push(region);
+                            regionId++;
+                        }
+                    }
+                }
+            }
+            
+            this.extractRegionColors(edgeRegions);
+            
+            console.log(`Created ${edgeRegions.length} edge strip regions`);
+            
+            return { regions: edgeRegions, regionMap: edgeRegionMap, thickEdges };
+        }
+
+        // Flood fill for non-edge areas (between edges)
+floodFill(startX, startY, regionId, thickEdges, regionMap) {
+    const region = {
+        id: regionId,
+        pixels: [],
+        bounds: { minX: startX, minY: startY, maxX: startX, maxY: startY },
+        color: { r: 0, g: 0, b: 0 },
+        area: 0,
+        isEdgeStrip: false
+    };
+    
+    const stack = [{ x: startX, y: startY }];
+    const visited = new Set();
+    visited.add(startY * this.width + startX);
+    
+    while (stack.length > 0) {
+        const { x, y } = stack.pop();
+        const idx = y * this.width + x;
+        
+        regionMap[idx] = regionId;
+        region.pixels.push({ x, y });
+        
+        region.bounds.minX = Math.min(region.bounds.minX, x);
+        region.bounds.minY = Math.min(region.bounds.minY, y);
+        region.bounds.maxX = Math.max(region.bounds.maxX, x);
+        region.bounds.maxY = Math.max(region.bounds.maxY, y);
+        
+        // Check 4-connected neighbors (more conservative for fill regions)
+        const neighbors = [
+            { x: x - 1, y: y },
+            { x: x + 1, y: y },
+            { x: x, y: y - 1 },
+            { x: x, y: y + 1 }
+        ];
+        
+        for (const n of neighbors) {
+            if (n.x >= 0 && n.x < this.width && n.y >= 0 && n.y < this.height) {
+                const nIdx = n.y * this.width + n.x;
+                // Only expand into non-edge areas that haven't been assigned
+                if (!visited.has(nIdx) && thickEdges[nIdx] === 0 && regionMap[nIdx] === 0) {
+                    visited.add(nIdx);
+                    stack.push({ x: n.x, y: n.y });
+                }
+            }
+        }
+    }
+    
+    region.area = region.pixels.length;
+    return region;
+}
+
+        // Flood fill for edge strips
+        floodFillEdgeStrip(startX, startY, regionId, thickEdges, regionMap) {
+            const region = {
+                id: regionId,
+                pixels: [],
+                bounds: { minX: startX, minY: startY, maxX: startX, maxY: startY },
+                color: { r: 0, g: 0, b: 0 },
+                area: 0,
+                isEdgeStrip: true
+            };
+            
+            const stack = [{ x: startX, y: startY }];
+            const visited = new Set();
+            visited.add(startY * this.width + startX);
+            
+            while (stack.length > 0) {
+                const { x, y } = stack.pop();
+                const idx = y * this.width + x;
+                
+                regionMap[idx] = regionId;
+                region.pixels.push({ x, y });
+                
+                region.bounds.minX = Math.min(region.bounds.minX, x);
+                region.bounds.minY = Math.min(region.bounds.minY, y);
+                region.bounds.maxX = Math.max(region.bounds.maxX, x);
+                region.bounds.maxY = Math.max(region.bounds.maxY, y);
+                
+                // Check 8-connected neighbors
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        
+                        if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {
+                            const nIdx = ny * this.width + nx;
+                            if (!visited.has(nIdx) && thickEdges[nIdx] === 1 && regionMap[nIdx] === 0) {
+                                visited.add(nIdx);
+                                stack.push({ x: nx, y: ny });
+                            }
+                        }
+                    }
+                }
+            }
+            
+            region.area = region.pixels.length;
+            return region;
+        }
+
             // Smart merge: combine tiny regions with similar-colored neighbors
             mergeSmallRegions(regions, regionMap, minArea) {
                 console.log(`Merging regions smaller than ${minArea} pixels...`);
@@ -1776,95 +1938,51 @@ console.log('Original image texture uploaded');
                 return largeRegions;
             }
             
-            // Extract regions from edge map using flood fill
             extractRegions(edgeMap, minArea) {
-            console.log(`Extracting regions (minArea: ${minArea})`);
-            
-            const regionMap = new Uint16Array(this.width * this.height);
-            const regions = [];
-            let regionId = 1;
-            
-            // Flood fill from each unassigned non-edge pixel
-            for (let y = 0; y < this.height; y++) {
-                for (let x = 0; x < this.width; x++) {
-                    const idx = y * this.width + x;
-                    
-                    // Skip if edge or already assigned
-                    if (edgeMap[idx] === 1 || regionMap[idx] !== 0) continue;
-                    
-                    // Start new region
-                    const region = this.floodFill(x, y, regionId, edgeMap, regionMap);
-                    
-                    // CHANGED: Keep ALL regions, even tiny ones (don't filter by minArea yet)
-                    regions.push(region);
-                    regionId++;
-                }
-            }
-            
-            // DON'T assign orphans - this merges small details into large regions
-            // this.assignOrphans(regionMap, regions); // COMMENT THIS OUT
-            
-            // Extract color data for each region
-            this.extractRegionColors(regions);
-            const mergedRegions = this.mergeSmallRegions(regions, regionMap, minArea);
-
-            
-            console.log(`Extracted ${regions.length} regions (including small details)`);
-            
-            return { regions, regionMap };
-        }
-            
-            floodFill(startX, startY, regionId, edgeMap, regionMap) {
-                const region = {
-                    id: regionId,
-                    pixels: [],
-                    bounds: { minX: startX, minY: startY, maxX: startX, maxY: startY },
-                    color: { r: 0, g: 0, b: 0 },
-                    area: 0,
-                    colorVariance: 0
-                };
+                console.log(`Extracting regions with edge-first approach (minArea: ${minArea})`);
                 
-                const stack = [{ x: startX, y: startY }];
-                const visited = new Set();
-                visited.add(startY * this.width + startX);
+                // NEW: First, subdivide the edges themselves into strips
+                const { regions: edgeRegions, regionMap: edgeRegionMap, thickEdges } = 
+                    this.subdivideEdges(edgeMap, 2); // 2 pixel wide edge strips
                 
-                while (stack.length > 0) {
-                    const { x, y } = stack.pop();
-                    const idx = y * this.width + x;
-                    
-                    // Mark as part of this region
-                    regionMap[idx] = regionId;
-                    region.pixels.push({ x, y });
-                    
-                    // Update bounds
-                    region.bounds.minX = Math.min(region.bounds.minX, x);
-                    region.bounds.minY = Math.min(region.bounds.minY, y);
-                    region.bounds.maxX = Math.max(region.bounds.maxX, x);
-                    region.bounds.maxY = Math.max(region.bounds.maxY, y);
-                    
-                    // Check 4-connected neighbors
-                    const neighbors = [
-                        { x: x + 1, y },
-                        { x: x - 1, y },
-                        { x, y: y + 1 },
-                        { x, y: y - 1 }
-                    ];
-                    
-                    for (const n of neighbors) {
-                        if (n.x < 0 || n.x >= this.width || n.y < 0 || n.y >= this.height) continue;
+                // Now extract the areas BETWEEN edges as regions
+                const regionMap = new Uint16Array(edgeRegionMap); // Copy edge map
+                const regions = [...edgeRegions]; // Start with edge regions
+                let regionId = edgeRegions.length + 1;
+                
+                // Flood fill non-edge areas
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        const idx = y * this.width + x;
                         
-                        const nIdx = n.y * this.width + n.x;
-                        if (visited.has(nIdx)) continue;
-                        if (edgeMap[nIdx] === 1) continue;
-                        if (regionMap[nIdx] !== 0) continue;
+                        // Skip if this is an edge strip or already assigned
+                        if (thickEdges[idx] === 1 || regionMap[idx] !== 0) continue;
                         
-                        visited.add(nIdx);
-                        stack.push(n);
+                        const region = this.floodFill(x, y, regionId, thickEdges, regionMap);
+                        
+                        if (region.pixels.length >= minArea) {
+                            regions.push(region);
+                            regionId++;
+                        }
                     }
                 }
                 
-                region.area = region.pixels.length;
-                return region;
+                // Extract colors
+                this.extractRegionColors(regions);
+                
+                // Smart merge tiny non-edge regions
+                const nonEdgeRegions = regions.filter(r => !r.isEdgeStrip);
+                const mergedNonEdge = this.mergeSmallRegions(nonEdgeRegions, regionMap, minArea);
+                
+                // Combine edge strips with merged regions
+                const finalRegions = [
+                    ...edgeRegions, // Keep all edge strips
+                    ...mergedNonEdge // Merged fill regions
+                ];
+                
+                console.log(`Extracted ${finalRegions.length} regions (${edgeRegions.length} edge strips + ${mergedNonEdge.length} fill regions)`);
+                
+                return { regions: finalRegions, regionMap };
             }
             
             assignOrphans(regionMap, regions) {
